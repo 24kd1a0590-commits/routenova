@@ -3,6 +3,8 @@
 <head>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body class="bg-slate-50 p-4">
     <div class="flex gap-2 mb-6">
@@ -43,6 +45,60 @@
             }
         }
         showRole('driver'); // Default
+        let map; // Global variable for the map
+
+function handleAccept() {
+    tg.HapticFeedback.impactOccurred('medium');
+    
+    const container = document.getElementById('view-container');
+    container.innerHTML = `
+        <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase">Route to Pickup</h2>
+        <div id="map" class="w-full h-64 rounded-2xl shadow-inner mb-4"></div>
+        
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-green-100">
+            <p class="text-xs text-gray-500 italic">Pickup Point:</p>
+            <p class="font-bold">City Market Gate 4</p>
+            <p class="text-xs text-blue-600 mt-2">Expected arrival: 12 mins</p>
+        </div>
+    `;
+
+    // Initialize the Map
+    // Coordinates: [Current Lat, Current Lng]
+    map = L.map('map').setView([12.9716, 77.5946], 13); 
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Marker for Driver (Start)
+    L.marker([12.9716, 77.5946]).addTo(map).bindPopup('Your Location').openPopup();
+
+    // Marker for Pickup (Bundle)
+    L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Bundle Pickup');
+
+    // Draw a line between them (The Route)
+    var latlngs = [
+        [12.9716, 77.5946],
+        [12.9850, 77.6050]
+    ];
+    var polyline = L.polyline(latlngs, {color: '#16a34a'}).addTo(map);
+
+    // Update Main Button for next step
+    tg.MainButton.setText("I HAVE ARRIVED AT PICKUP");
+    tg.MainButton.onClick(showQRCode); // Move to the QR Step
+}
+
+function showQRCode() {
+    tg.HapticFeedback.notificationOccurred('success');
+    const container = document.getElementById('view-container');
+    container.innerHTML = `
+        <div class="flex flex-col items-center mt-6">
+            <div id="qrcode" class="p-4 bg-white rounded-3xl shadow-xl"></div>
+            <p class="mt-6 text-center font-medium">Scan to Confirm Delivery<br>
+            <span class="text-slate-400 text-sm font-normal uppercase tracking-widest">Order: RN-2026</span></p>
+        </div>
+    `;
+    new QRCode(document.getElementById("qrcode"), "ORDER_CONFIRMED");
+    tg.MainButton.hide();
+}
     </script>
 </body>
 </html>
