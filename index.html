@@ -1,99 +1,145 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>RouteNova</title>
+    
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        #map { height: 250px; width: 100%; border-radius: 1rem; z-index: 1; }
+        body { font-family: sans-serif; }
+    </style>
 </head>
 <body class="bg-slate-50 p-4">
-    <div class="flex gap-2 mb-6">
-        <button onclick="showRole('driver')" class="bg-green-600 text-white px-4 py-2 rounded-full text-xs">Driver View</button>
-        <button onclick="showRole('shipper')" class="bg-blue-600 text-white px-4 py-2 rounded-full text-xs">Shipper View</button>
+
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-black text-green-600 italic">RouteNova</h1>
+        <div id="role-indicator" class="text-[10px] px-2 py-1 rounded-full font-bold uppercase bg-slate-200">Mode: Initial</div>
     </div>
 
-    <div id="main-content"></div>
+    <div class="flex gap-2 mb-6">
+        <button onclick="showRole('driver')" class="bg-green-600 text-white px-4 py-2 rounded-full text-xs shadow-md">Driver View</button>
+        <button onclick="showRole('shipper')" class="bg-blue-600 text-white px-4 py-2 rounded-full text-xs shadow-md">Shipper View</button>
+    </div>
+
+    <div id="main-content" class="min-h-[300px]">
+        <p class="text-center text-slate-400 mt-10">Select a role to begin the demo...</p>
+    </div>
 
     <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
+        const tg = window.Telegram.WebApp;
+        tg.expand();
 
-    let map; // Global variable for the map
+        let map;
 
-    function showRole(role) {
-        const content = document.getElementById('main-content');
-        if (role === 'driver') {
+        function showRole(role) {
+            const content = document.getElementById('main-content');
+            const indicator = document.getElementById('role-indicator');
+            
+            // Clear existing logic
+            tg.MainButton.offClick(handleAccept);
+            tg.MainButton.offClick(showQRCode);
+            
+            if (role === 'driver') {
+                indicator.innerText = "Mode: Driver";
+                indicator.className = "text-[10px] px-2 py-1 rounded-full font-bold uppercase bg-green-100 text-green-700";
+                
+                content.innerHTML = `
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">Nearby Backhaul Bundles</h2>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 mb-3">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="text-sm font-bold">Bundle #882: 4x Rice Sacks</p>
+                                <p class="text-xs text-gray-500 italic">Route: City -> Green Valley</p>
+                            </div>
+                            <span class="font-bold text-green-600">$22.00</span>
+                        </div>
+                    </div>
+                `;
+                
+                tg.MainButton.setText("ACCEPT BUNDLE & VIEW ROUTE");
+                tg.MainButton.show();
+                tg.MainButton.onClick(handleAccept);
+            } else {
+                indicator.innerText = "Mode: Shipper";
+                indicator.className = "text-[10px] px-2 py-1 rounded-full font-bold uppercase bg-blue-100 text-blue-700";
+                
+                content.innerHTML = `
+                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">Request a Backhaul</h2>
+                    <div class="space-y-4">
+                        <input type="text" placeholder="Item name..." class="w-full p-3 rounded-xl border border-slate-200">
+                        <input type="number" placeholder="Weight (kg)" class="w-full p-3 rounded-xl border border-slate-200">
+                        <button class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Post to Network</button>
+                    </div>
+                `;
+                tg.MainButton.hide();
+            }
+        }
+
+        function handleAccept() {
+            tg.HapticFeedback.impactOccurred('medium');
+            tg.MainButton.offClick(handleAccept); // Critical: stop repeat clicks
+
+            const content = document.getElementById('main-content');
             content.innerHTML = `
-                <h1 class="text-xl font-bold mb-4">Backhaul Matches</h1>
-                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500 mb-3">
-                    <p class="text-sm font-bold">Package: 4x Rice Sacks</p>
-                    <p class="text-xs text-gray-500">Pickup: City Market | Pay: $15</p>
+                <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase italic">Navigation to Pickup</h2>
+                <div id="map" class="shadow-lg border-2 border-white"></div>
+                <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-tighter">Current Destination</p>
+                    <p class="text-lg font-bold">City Market Gate 4</p>
+                    <p class="text-xs text-green-500 font-bold">🚀 12 mins faster than main route</p>
                 </div>
             `;
-            tg.MainButton.setText("ACCEPT BUNDLE");
-            tg.MainButton.show();
-            // This is the trigger for the map
-            tg.MainButton.onClick(handleAccept); 
-        } else {
-            // Shipper View logic
-            content.innerHTML = `<h1 class="text-xl font-bold mb-4">Send Goods</h1>`;
+
+            // Initialize Map with slight delay to ensure div is rendered
+            setTimeout(() => {
+                map = L.map('map').setView([12.9716, 77.5946], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                
+                L.marker([12.9716, 77.5946]).addTo(map).bindPopup('You').openPopup();
+                L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Pickup');
+                
+                L.polyline([[12.9716, 77.5946], [12.9850, 77.6050]], {color: '#16a34a', weight: 5}).addTo(map);
+            }, 200);
+
+            tg.MainButton.setText("I HAVE ARRIVED AT PICKUP");
+            tg.MainButton.onClick(showQRCode);
+        }
+
+        function showQRCode() {
+            tg.MainButton.offClick(showQRCode);
+            tg.HapticFeedback.notificationOccurred('success');
+            
+            const content = document.getElementById('main-content');
+            content.innerHTML = `
+                <div class="flex flex-col items-center justify-center pt-10">
+                    <div id="qrcode" class="p-6 bg-white rounded-[2rem] shadow-2xl border-4 border-green-50"></div>
+                    <p class="mt-8 text-center">
+                        <span class="font-black text-xl text-slate-800 tracking-tight">SCAN TO VERIFY</span><br>
+                        <span class="text-slate-400 text-sm">Release Order #RN-2026</span>
+                    </p>
+                </div>
+            `;
+            
+            new QRCode(document.getElementById("qrcode"), {
+                text: "SUCCESS_VERIFIED",
+                width: 200,
+                height: 200,
+                colorDark : "#16a34a",
+                colorLight : "#ffffff"
+            });
+            
             tg.MainButton.hide();
         }
-    }
 
-    function handleAccept() {
-        tg.HapticFeedback.impactOccurred('medium');
-        
-        // Remove the previous click listener so it doesn't double-trigger
-        tg.MainButton.offClick(handleAccept);
-
-        const container = document.getElementById('main-content'); // Changed from view-container for simplicity
-        container.innerHTML = `
-            <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase">Route to Pickup</h2>
-            <div id="map" style="width: 100%; height: 250px;" class="rounded-2xl shadow-inner mb-4"></div>
-            
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-green-100">
-                <p class="text-xs text-gray-500 italic">Pickup Point:</p>
-                <p class="font-bold">City Market Gate 4</p>
-                <p class="text-xs text-blue-600 mt-2">Expected arrival: 12 mins</p>
-            </div>
-        `;
-
-        // Wait a tiny bit for the div to exist before loading map
-        setTimeout(() => {
-            map = L.map('map').setView([12.9716, 77.5946], 13); 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            L.marker([12.9716, 77.5946]).addTo(map).bindPopup('Your Location').openPopup();
-            L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Bundle Pickup');
-            
-            var latlngs = [[12.9716, 77.5946], [12.9850, 77.6050]];
-            L.polyline(latlngs, {color: '#16a34a'}).addTo(map);
-        }, 100);
-
-        tg.MainButton.setText("I HAVE ARRIVED AT PICKUP");
-        tg.MainButton.onClick(showQRCode);
-    }
-
-    function showQRCode() {
-        tg.MainButton.offClick(showQRCode);
-        tg.HapticFeedback.notificationOccurred('success');
-        const container = document.getElementById('main-content');
-        container.innerHTML = `
-            <div class="flex flex-col items-center mt-6">
-                <div id="qrcode" class="p-4 bg-white rounded-3xl shadow-xl"></div>
-                <p class="mt-6 text-center font-medium">Scan to Confirm Delivery<br>
-                <span class="text-slate-400 text-sm font-normal uppercase tracking-widest">Order: RN-2026</span></p>
-            </div>
-        `;
-        new QRCode(document.getElementById("qrcode"), "ORDER_CONFIRMED");
-        tg.MainButton.hide();
-    }
-
-    showRole('driver'); // Initial Call
-</script>
-    
+        // Auto-load driver view on start for demo
+        window.onload = () => showRole('driver');
+    </script>
 </body>
 </html>
