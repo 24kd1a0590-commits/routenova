@@ -74,36 +74,78 @@
         }
 
         function renderDriverMatches() {
-            const content = document.getElementById('app-content');
-            content.innerHTML = `
-                <div class="animate-fade-in">
-                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2">📦 Available for your Return Route</h2>
-                    <div class="space-y-4">
-                        <div class="bg-white p-5 rounded-3xl border-2 border-green-50 shadow-sm">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="font-black text-slate-800">4x Sacks of Rice</h3>
-                                    <p class="text-xs text-slate-400 mt-1">Pickup: Central Market Gate 4</p>
-                                    <p class="text-xs text-slate-400">Deliver: Green Valley Village</p>
-                                </div>
-                                <span class="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded-lg">$15</span>
-                            </div>
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+        <div class="animate-fade-in">
+            <div class="bg-green-600 p-6 rounded-[2rem] shadow-xl mb-8 text-white">
+                <h2 class="text-sm font-bold opacity-80 uppercase mb-4">Set Your Return Destination</h2>
+                <div class="space-y-3">
+                    <div class="relative">
+                        <input type="text" id="destination-input" 
+                               placeholder="Where are you heading?" 
+                               class="w-full p-4 pl-12 rounded-2xl border-none text-slate-800 font-bold focus:ring-4 focus:ring-green-400 outline-none shadow-inner"
+                               value="Green Valley Village">
+                        <span class="absolute left-4 top-4 text-xl">📍</span>
+                    </div>
+                    <button onclick="findLoadsOnRoute()" class="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all flex justify-center items-center gap-2">
+                        🔍 FIND LOADS ON MY WAY
+                    </button>
+                </div>
+            </div>
+
+            <div id="results-container">
+                <p class="text-center text-slate-400 text-sm italic mt-10 px-10">
+                    Enter your destination above to see matches along your return path.
+                </p>
+            </div>
+        </div>
+    `;
+    
+    // Hide the primary button initially until they search
+    document.getElementById('action-bar').style.display = "none";
+}
+
+function findLoadsOnRoute() {
+    const dest = document.getElementById('destination-input').value;
+    const results = document.getElementById('results-container');
+    const actionBar = document.getElementById('action-bar');
+    
+    // Show loading state
+    results.innerHTML = `<div class="flex flex-col items-center mt-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div><p class="text-xs text-slate-400 mt-2">Calculating route to ${dest}...</p></div>`;
+
+    setTimeout(() => {
+        results.innerHTML = `
+            <h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest px-2">Top Matches Near Your Route</h3>
+            <div class="space-y-4">
+                <div class="bg-white p-5 rounded-3xl border-2 border-green-100 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">98% Match</div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-black text-slate-800">4x Rice Sacks</h3>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">Pickup: City Market (0.5km away)</p>
+                            <p class="text-[10px] text-blue-500 font-bold uppercase mt-1 italic">Dropoff: On your route to ${dest}</p>
                         </div>
-                        <div class="bg-white p-5 rounded-3xl border-2 border-green-50 shadow-sm">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h3 class="font-black text-slate-800">Construction Tools</h3>
-                                    <p class="text-xs text-slate-400 mt-1">Pickup: Market Hardware Row</p>
-                                    <p class="text-xs text-slate-400">Deliver: Green Valley Village</p>
-                                </div>
-                                <span class="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded-lg">$7</span>
-                            </div>
-                        </div>
+                        <span class="text-xl font-black text-green-600">$15</span>
                     </div>
                 </div>
-            `;
-            document.getElementById('primary-btn').innerText = "ACCEPT BUNDLES ($22.00)";
-        }
+
+                <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm opacity-80">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-black text-slate-800 text-sm">Hardware Tools</h3>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">Pickup: 2km deviation</p>
+                        </div>
+                        <span class="text-lg font-black text-green-600">$7</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Show the Accept button now that results are found
+        actionBar.style.display = "block";
+        document.getElementById('primary-btn').innerText = `ACCEPT ${dest} BUNDLE ($22)`;
+    }, 1200);
+}
 
         function renderShipperForm() {
             const content = document.getElementById('app-content');
