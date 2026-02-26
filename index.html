@@ -15,90 +15,83 @@
     <div id="main-content"></div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
+        <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
 
-        function showRole(role) {
-            const content = document.getElementById('main-content');
-            if (role === 'driver') {
-                content.innerHTML = `
-                    <h1 class="text-xl font-bold mb-4">Backhaul Matches</h1>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500 mb-3">
-                        <p class="text-sm font-bold">Package: 4x Rice Sacks</p>
-                        <p class="text-xs text-gray-500">Pickup: City Market | Pay: $15</p>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
-                        <p class="text-sm font-bold">Package: Tools Box</p>
-                        <p class="text-xs text-gray-500">Pickup: Market Gate 2 | Pay: $7</p>
-                    </div>
-                `;
-                tg.MainButton.setText("ACCEPT ALL LOADS ($22)");
-                tg.MainButton.show();
-            } else {
-                content.innerHTML = `
-                    <h1 class="text-xl font-bold mb-4">Send Goods to Village</h1>
-                    <input type="text" placeholder="What are you sending?" class="w-full p-3 rounded-lg border mb-3">
-                    <input type="number" placeholder="Weight (kg)" class="w-full p-3 rounded-lg border mb-3">
-                    <button class="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">Find Returning Truck</button>
-                `;
-                tg.MainButton.hide();
-            }
+    let map; // Global variable for the map
+
+    function showRole(role) {
+        const content = document.getElementById('main-content');
+        if (role === 'driver') {
+            content.innerHTML = `
+                <h1 class="text-xl font-bold mb-4">Backhaul Matches</h1>
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500 mb-3">
+                    <p class="text-sm font-bold">Package: 4x Rice Sacks</p>
+                    <p class="text-xs text-gray-500">Pickup: City Market | Pay: $15</p>
+                </div>
+            `;
+            tg.MainButton.setText("ACCEPT BUNDLE");
+            tg.MainButton.show();
+            // This is the trigger for the map
+            tg.MainButton.onClick(handleAccept); 
+        } else {
+            // Shipper View logic
+            content.innerHTML = `<h1 class="text-xl font-bold mb-4">Send Goods</h1>`;
+            tg.MainButton.hide();
         }
-        showRole('driver'); // Default
-        let map; // Global variable for the map
+    }
 
-function handleAccept() {
-    tg.HapticFeedback.impactOccurred('medium');
-    
-    const container = document.getElementById('view-container');
-    container.innerHTML = `
-        <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase">Route to Pickup</h2>
-        <div id="map" class="w-full h-64 rounded-2xl shadow-inner mb-4"></div>
+    function handleAccept() {
+        tg.HapticFeedback.impactOccurred('medium');
         
-        <div class="bg-white p-4 rounded-2xl shadow-sm border border-green-100">
-            <p class="text-xs text-gray-500 italic">Pickup Point:</p>
-            <p class="font-bold">City Market Gate 4</p>
-            <p class="text-xs text-blue-600 mt-2">Expected arrival: 12 mins</p>
-        </div>
-    `;
+        // Remove the previous click listener so it doesn't double-trigger
+        tg.MainButton.offClick(handleAccept);
 
-    // Initialize the Map
-    // Coordinates: [Current Lat, Current Lng]
-    map = L.map('map').setView([12.9716, 77.5946], 13); 
+        const container = document.getElementById('main-content'); // Changed from view-container for simplicity
+        container.innerHTML = `
+            <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase">Route to Pickup</h2>
+            <div id="map" style="width: 100%; height: 250px;" class="rounded-2xl shadow-inner mb-4"></div>
+            
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-green-100">
+                <p class="text-xs text-gray-500 italic">Pickup Point:</p>
+                <p class="font-bold">City Market Gate 4</p>
+                <p class="text-xs text-blue-600 mt-2">Expected arrival: 12 mins</p>
+            </div>
+        `;
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        // Wait a tiny bit for the div to exist before loading map
+        setTimeout(() => {
+            map = L.map('map').setView([12.9716, 77.5946], 13); 
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.marker([12.9716, 77.5946]).addTo(map).bindPopup('Your Location').openPopup();
+            L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Bundle Pickup');
+            
+            var latlngs = [[12.9716, 77.5946], [12.9850, 77.6050]];
+            L.polyline(latlngs, {color: '#16a34a'}).addTo(map);
+        }, 100);
 
-    // Marker for Driver (Start)
-    L.marker([12.9716, 77.5946]).addTo(map).bindPopup('Your Location').openPopup();
+        tg.MainButton.setText("I HAVE ARRIVED AT PICKUP");
+        tg.MainButton.onClick(showQRCode);
+    }
 
-    // Marker for Pickup (Bundle)
-    L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Bundle Pickup');
+    function showQRCode() {
+        tg.MainButton.offClick(showQRCode);
+        tg.HapticFeedback.notificationOccurred('success');
+        const container = document.getElementById('main-content');
+        container.innerHTML = `
+            <div class="flex flex-col items-center mt-6">
+                <div id="qrcode" class="p-4 bg-white rounded-3xl shadow-xl"></div>
+                <p class="mt-6 text-center font-medium">Scan to Confirm Delivery<br>
+                <span class="text-slate-400 text-sm font-normal uppercase tracking-widest">Order: RN-2026</span></p>
+            </div>
+        `;
+        new QRCode(document.getElementById("qrcode"), "ORDER_CONFIRMED");
+        tg.MainButton.hide();
+    }
 
-    // Draw a line between them (The Route)
-    var latlngs = [
-        [12.9716, 77.5946],
-        [12.9850, 77.6050]
-    ];
-    var polyline = L.polyline(latlngs, {color: '#16a34a'}).addTo(map);
-
-    // Update Main Button for next step
-    tg.MainButton.setText("I HAVE ARRIVED AT PICKUP");
-    tg.MainButton.onClick(showQRCode); // Move to the QR Step
-}
-
-function showQRCode() {
-    tg.HapticFeedback.notificationOccurred('success');
-    const container = document.getElementById('view-container');
-    container.innerHTML = `
-        <div class="flex flex-col items-center mt-6">
-            <div id="qrcode" class="p-4 bg-white rounded-3xl shadow-xl"></div>
-            <p class="mt-6 text-center font-medium">Scan to Confirm Delivery<br>
-            <span class="text-slate-400 text-sm font-normal uppercase tracking-widest">Order: RN-2026</span></p>
-        </div>
-    `;
-    new QRCode(document.getElementById("qrcode"), "ORDER_CONFIRMED");
-    tg.MainButton.hide();
-}
+    showRole('driver'); // Initial Call
+</script>
     </script>
 </body>
 </html>
