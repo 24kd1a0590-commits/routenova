@@ -1,145 +1,197 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>RouteNova</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RouteNova | Smart Rural Logistics</title>
     
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
-        #map { height: 250px; width: 100%; border-radius: 1rem; z-index: 1; }
-        body { font-family: sans-serif; }
+        #map { height: 300px; width: 100%; border-radius: 1.5rem; }
+        .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
     </style>
 </head>
-<body class="bg-slate-50 p-4">
+<body class="bg-slate-100 font-sans antialiased text-slate-900">
 
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-black text-green-600 italic">RouteNova</h1>
-        <div id="role-indicator" class="text-[10px] px-2 py-1 rounded-full font-bold uppercase bg-slate-200">Mode: Initial</div>
-    </div>
+    <div class="app-container bg-white shadow-2xl flex flex-col min-h-screen relative">
+        
+        <header class="p-6 flex justify-between items-center border-b bg-white sticky top-0 z-50">
+            <div>
+                <h1 class="text-2xl font-black text-green-600 italic tracking-tighter">RouteNova</h1>
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Rural Micro-Logistics</p>
+            </div>
+            <div id="status-pill" class="bg-green-100 text-green-700 text-[10px] px-3 py-1 rounded-full font-bold">DRIVER ONLINE</div>
+        </header>
 
-    <div class="flex gap-2 mb-6">
-        <button onclick="showRole('driver')" class="bg-green-600 text-white px-4 py-2 rounded-full text-xs shadow-md">Driver View</button>
-        <button onclick="showRole('shipper')" class="bg-blue-600 text-white px-4 py-2 rounded-full text-xs shadow-md">Shipper View</button>
-    </div>
+        <div class="flex p-2 bg-slate-100 m-4 rounded-2xl">
+            <button onclick="switchView('driver')" id="tab-driver" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all bg-white shadow-sm text-green-600">Driver View</button>
+            <button onclick="switchView('shipper')" id="tab-shipper" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all text-slate-500">Shipper View</button>
+        </div>
 
-    <div id="main-content" class="min-h-[300px]">
-        <p class="text-center text-slate-400 mt-10">Select a role to begin the demo...</p>
+        <main id="app-content" class="flex-1 p-4 pb-32">
+            </main>
+
+        <div id="action-bar" class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto p-6 bg-gradient-to-t from-white via-white to-transparent">
+            <button id="primary-btn" onclick="handlePrimaryAction()" class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all transform active:scale-95 flex justify-center items-center gap-2">
+                ACCEPT ALL BUNDLES ($22)
+            </button>
+        </div>
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
+        let currentRole = 'driver';
+        let currentStep = 'matches'; // matches -> map -> qrcode
+        let map = null;
 
-        let map;
+        function switchView(role) {
+            currentRole = role;
+            currentStep = 'matches';
+            const driverTab = document.getElementById('tab-driver');
+            const shipperTab = document.getElementById('tab-shipper');
+            const btn = document.getElementById('primary-btn');
+            const status = document.getElementById('status-pill');
 
-        function showRole(role) {
-            const content = document.getElementById('main-content');
-            const indicator = document.getElementById('role-indicator');
-            
-            // Clear existing logic
-            tg.MainButton.offClick(handleAccept);
-            tg.MainButton.offClick(showQRCode);
-            
             if (role === 'driver') {
-                indicator.innerText = "Mode: Driver";
-                indicator.className = "text-[10px] px-2 py-1 rounded-full font-bold uppercase bg-green-100 text-green-700";
-                
-                content.innerHTML = `
-                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">Nearby Backhaul Bundles</h2>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500 mb-3">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="text-sm font-bold">Bundle #882: 4x Rice Sacks</p>
-                                <p class="text-xs text-gray-500 italic">Route: City -> Green Valley</p>
-                            </div>
-                            <span class="font-bold text-green-600">$22.00</span>
-                        </div>
-                    </div>
-                `;
-                
-                tg.MainButton.setText("ACCEPT BUNDLE & VIEW ROUTE");
-                tg.MainButton.show();
-                tg.MainButton.onClick(handleAccept);
+                driverTab.className = "flex-1 py-2 text-sm font-bold rounded-xl bg-white shadow-sm text-green-600";
+                shipperTab.className = "flex-1 py-2 text-sm font-bold rounded-xl text-slate-500";
+                status.innerText = "DRIVER ONLINE";
+                status.className = "bg-green-100 text-green-700 text-[10px] px-3 py-1 rounded-full font-bold";
+                btn.parentElement.style.display = "block";
+                renderDriverMatches();
             } else {
-                indicator.innerText = "Mode: Shipper";
-                indicator.className = "text-[10px] px-2 py-1 rounded-full font-bold uppercase bg-blue-100 text-blue-700";
-                
-                content.innerHTML = `
-                    <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase">Request a Backhaul</h2>
-                    <div class="space-y-4">
-                        <input type="text" placeholder="Item name..." class="w-full p-3 rounded-xl border border-slate-200">
-                        <input type="number" placeholder="Weight (kg)" class="w-full p-3 rounded-xl border border-slate-200">
-                        <button class="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Post to Network</button>
-                    </div>
-                `;
-                tg.MainButton.hide();
+                shipperTab.className = "flex-1 py-2 text-sm font-bold rounded-xl bg-white shadow-sm text-blue-600";
+                driverTab.className = "flex-1 py-2 text-sm font-bold rounded-xl text-slate-500";
+                status.innerText = "SHIPPER MODE";
+                status.className = "bg-blue-100 text-blue-700 text-[10px] px-3 py-1 rounded-full font-bold";
+                btn.parentElement.style.display = "none";
+                renderShipperForm();
             }
         }
 
-        function handleAccept() {
-            tg.HapticFeedback.impactOccurred('medium');
-            tg.MainButton.offClick(handleAccept); // Critical: stop repeat clicks
-
-            const content = document.getElementById('main-content');
+        function renderDriverMatches() {
+            const content = document.getElementById('app-content');
             content.innerHTML = `
-                <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase italic">Navigation to Pickup</h2>
-                <div id="map" class="shadow-lg border-2 border-white"></div>
-                <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                    <p class="text-xs text-slate-400 uppercase font-bold tracking-tighter">Current Destination</p>
-                    <p class="text-lg font-bold">City Market Gate 4</p>
-                    <p class="text-xs text-green-500 font-bold">🚀 12 mins faster than main route</p>
+                <div class="animate-fade-in">
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2">📦 Available for your Return Route</h2>
+                    <div class="space-y-4">
+                        <div class="bg-white p-5 rounded-3xl border-2 border-green-50 shadow-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-black text-slate-800">4x Sacks of Rice</h3>
+                                    <p class="text-xs text-slate-400 mt-1">Pickup: Central Market Gate 4</p>
+                                    <p class="text-xs text-slate-400">Deliver: Green Valley Village</p>
+                                </div>
+                                <span class="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded-lg">$15</span>
+                            </div>
+                        </div>
+                        <div class="bg-white p-5 rounded-3xl border-2 border-green-50 shadow-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-black text-slate-800">Construction Tools</h3>
+                                    <p class="text-xs text-slate-400 mt-1">Pickup: Market Hardware Row</p>
+                                    <p class="text-xs text-slate-400">Deliver: Green Valley Village</p>
+                                </div>
+                                <span class="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded-lg">$7</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
+            document.getElementById('primary-btn').innerText = "ACCEPT BUNDLES ($22.00)";
+        }
 
-            // Initialize Map with slight delay to ensure div is rendered
+        function renderShipperForm() {
+            const content = document.getElementById('app-content');
+            content.innerHTML = `
+                <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                    <h2 class="text-lg font-bold mb-4">Post a Backhaul Request</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Item Name</label>
+                            <input type="text" placeholder="e.g. Fertilizer Sacks" class="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">Total Weight (kg)</label>
+                            <input type="number" placeholder="50" class="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <button class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-100">FIND A RETURNING TRUCK</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handlePrimaryAction() {
+            if (currentStep === 'matches') {
+                showRouteMap();
+            } else if (currentStep === 'map') {
+                showVerificationQR();
+            }
+        }
+
+        function showRouteMap() {
+            currentStep = 'map';
+            const content = document.getElementById('app-content');
+            content.innerHTML = `
+                <h2 class="text-lg font-bold mb-4">Route to Pickup</h2>
+                <div id="map" class="shadow-xl"></div>
+                <div class="mt-6 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
+                    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">12m</div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400">NEXT STOP</p>
+                        <p class="font-black">City Market Gate 4</p>
+                    </div>
+                </div>
+            `;
+            
+            // Map logic
             setTimeout(() => {
                 map = L.map('map').setView([12.9716, 77.5946], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                
-                L.marker([12.9716, 77.5946]).addTo(map).bindPopup('You').openPopup();
+                L.marker([12.9716, 77.5946]).addTo(map).bindPopup('You');
                 L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Pickup');
-                
-                L.polyline([[12.9716, 77.5946], [12.9850, 77.6050]], {color: '#16a34a', weight: 5}).addTo(map);
-            }, 200);
+                L.polyline([[12.9716, 77.5946], [12.9850, 77.6050]], {color: '#16a34a', weight: 6}).addTo(map);
+            }, 100);
 
-            tg.MainButton.setText("I HAVE ARRIVED AT PICKUP");
-            tg.MainButton.onClick(showQRCode);
+            document.getElementById('primary-btn').innerText = "I HAVE ARRIVED AT PICKUP";
         }
 
-        function showQRCode() {
-            tg.MainButton.offClick(showQRCode);
-            tg.HapticFeedback.notificationOccurred('success');
-            
-            const content = document.getElementById('main-content');
+        function showVerificationQR() {
+            currentStep = 'qrcode';
+            const content = document.getElementById('app-content');
             content.innerHTML = `
                 <div class="flex flex-col items-center justify-center pt-10">
-                    <div id="qrcode" class="p-6 bg-white rounded-[2rem] shadow-2xl border-4 border-green-50"></div>
-                    <p class="mt-8 text-center">
-                        <span class="font-black text-xl text-slate-800 tracking-tight">SCAN TO VERIFY</span><br>
-                        <span class="text-slate-400 text-sm">Release Order #RN-2026</span>
-                    </p>
+                    <div id="qrcode" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50"></div>
+                    <div class="mt-8 text-center">
+                        <p class="font-black text-2xl text-slate-800 italic">VERIFY DELIVERY</p>
+                        <p class="text-slate-400 text-sm font-medium mt-1">Scan at Green Valley Village Store</p>
+                    </div>
+                    <div class="mt-8 w-full bg-green-50 p-6 rounded-3xl border border-green-100">
+                        <div class="flex justify-between items-center text-green-800 font-bold">
+                            <span>CO2 REDUCED</span>
+                            <span>4.8 kg</span>
+                        </div>
+                    </div>
                 </div>
             `;
             
             new QRCode(document.getElementById("qrcode"), {
-                text: "SUCCESS_VERIFIED",
+                text: "ROUTENOVA_ORDER_9921",
                 width: 200,
                 height: 200,
                 colorDark : "#16a34a",
                 colorLight : "#ffffff"
             });
             
-            tg.MainButton.hide();
+            document.getElementById('action-bar').style.display = "none";
         }
 
-        // Auto-load driver view on start for demo
-        window.onload = () => showRole('driver');
+        // Initialize App
+        window.onload = renderDriverMatches;
     </script>
 </body>
 </html>
