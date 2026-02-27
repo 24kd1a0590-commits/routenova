@@ -247,75 +247,98 @@ function updatePrimaryButton() {
 }
 
 // Optimized Map Logic for Micropooling
+
+
+        // Global storage to simulate offline queue
+let uploadQueue = [];
+
 function showRouteMap() {
     currentStep = 'map';
     const content = document.getElementById('app-content');
     content.innerHTML = `
-        <h2 class="text-lg font-bold mb-4">Optimized Collection Route</h2>
-        <div id="map" class="shadow-xl"></div>
-        <div class="mt-4 grid grid-cols-2 gap-3">
-            <div class="bg-white p-4 rounded-2xl border border-slate-100">
-                <p class="text-[10px] text-slate-400 font-bold uppercase">Total Distance</p>
-                <p class="text-lg font-black italic">14.2 km</p>
+        <h2 class="text-lg font-bold mb-4 italic text-slate-500 uppercase text-xs tracking-widest">Step 1: Secure Pickup</h2>
+        
+        <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-green-50 mb-6">
+            <p class="text-sm font-bold text-slate-700 mb-4 text-center">📸 Take a Photo of the Loaded Goods</p>
+            <div id="photo-preview-pickup" class="w-full h-48 bg-slate-100 rounded-3xl mb-4 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
+                <span class="text-slate-400 text-xs">No Photo Captured</span>
             </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-100">
-                <p class="text-[10px] text-slate-400 font-bold uppercase">Time Efficiency</p>
-                <p class="text-lg font-black text-green-600 italic">+88%</p>
+            <input type="file" id="camera-pickup" accept="image/*" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-pickup')">
+            <button onclick="document.getElementById('camera-pickup').click()" class="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl border border-slate-200">
+                OPEN CAMERA
+            </button>
+        </div>
+
+        <div id="map" class="shadow-xl"></div>
+    `;
+    
+    setTimeout(initMap, 200); // Your existing map init logic
+    document.getElementById('primary-btn').innerText = "PROCEED TO UNLOAD";
+}
+
+function previewImage(input, targetId) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const container = document.getElementById(targetId);
+            container.innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover">`;
+            
+            // SIMULATE OFFLINE QUEUEING
+            addToOfflineQueue(targetId, "Image saved locally. Will sync when online.");
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function addToOfflineQueue(type, msg) {
+    uploadQueue.push({type, time: new Date()});
+    // Create a temporary "Offline Alert" UI
+    const alertBox = document.createElement('div');
+    alertBox.className = "fixed top-20 left-4 right-4 bg-orange-500 text-white p-3 rounded-2xl text-[10px] font-bold z-[100] animate-bounce shadow-lg flex justify-between";
+    alertBox.innerHTML = `<span>📡 OFFLINE: ${msg}</span><span class="opacity-50">SYNCING...</span>`;
+    document.body.appendChild(alertBox);
+    
+    // Remove alert after 3 seconds to simulate background process
+    setTimeout(() => alertBox.remove(), 4000);
+}
+
+function showVerificationQR() {
+    currentStep = 'qrcode';
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+        <div class="flex flex-col items-center pt-4">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Step 2: Delivery Verification</h2>
+            
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-blue-50 mb-6 w-full">
+                <p class="text-sm font-bold text-slate-700 mb-4 text-center">📸 Photo of Unloaded Items</p>
+                <div id="photo-preview-unload" class="w-full h-40 bg-slate-50 rounded-3xl mb-4 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
+                     <span class="text-slate-400 text-xs">Waiting for Unload Photo</span>
+                </div>
+                <input type="file" id="camera-unload" accept="image/*" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-unload')">
+                <button onclick="document.getElementById('camera-unload').click()" class="w-full py-3 bg-blue-50 text-blue-600 font-bold rounded-2xl border border-blue-100 uppercase text-[10px]">
+                    CAPTURE UNLOAD
+                </button>
+            </div>
+
+            <div id="qrcode" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50"></div>
+            
+            <div class="mt-6 text-center">
+                <p class="font-black text-xl text-slate-800 italic">SECURE RELEASE</p>
+                <p class="text-slate-400 text-xs">Offline Sync Active: ${uploadQueue.length} Files Queued</p>
             </div>
         </div>
     `;
     
-    setTimeout(() => {
-        map = L.map('map').setView([12.9716, 77.5946], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
-        // SHOWING MULTIPLE STOPS (Route Optimization Visual)
-        const stops = [
-            [12.9716, 77.5946], // Current
-            [12.9850, 77.6050], // Pickup 1
-            [12.9900, 77.6200], // Pickup 2
-            [13.0500, 77.7500]  // Home
-        ];
-        
-        stops.forEach((stop, i) => {
-            L.marker(stop).addTo(map).bindPopup(i === 0 ? "You" : i === 3 ? "Home" : "Pickup " + i);
-        });
-
-        L.polyline(stops, {color: '#16a34a', weight: 5, dashArray: '10, 10'}).addTo(map);
-    }, 100);
-
-    document.getElementById('primary-btn').innerText = "ARRIVED AT FINAL PICKUP";
+    new QRCode(document.getElementById("qrcode"), {
+        text: "ORDER_COMPLETE_SYNC_PENDING",
+        width: 160,
+        height: 160,
+        colorDark : "#16a34a",
+        colorLight : "#ffffff"
+    });
+    
+    document.getElementById('action-bar').style.display = "none";
 }
-
-        function showVerificationQR() {
-            currentStep = 'qrcode';
-            const content = document.getElementById('app-content');
-            content.innerHTML = `
-                <div class="flex flex-col items-center justify-center pt-10">
-                    <div id="qrcode" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50"></div>
-                    <div class="mt-8 text-center">
-                        <p class="font-black text-2xl text-slate-800 italic">VERIFY DELIVERY</p>
-                        <p class="text-slate-400 text-sm font-medium mt-1">Scan at Green Valley Village Store</p>
-                    </div>
-                    <div class="mt-8 w-full bg-green-50 p-6 rounded-3xl border border-green-100">
-                        <div class="flex justify-between items-center text-green-800 font-bold">
-                            <span>CO2 REDUCED</span>
-                            <span>4.8 kg</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            new QRCode(document.getElementById("qrcode"), {
-                text: "ROUTENOVA_ORDER_9921",
-                width: 200,
-                height: 200,
-                colorDark : "#16a34a",
-                colorLight : "#ffffff"
-            });
-            
-            document.getElementById('action-bar').style.display = "none";
-        }
 
         // Initialize App
         window.onload = renderDriverMatches;
