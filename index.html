@@ -51,6 +51,9 @@
     </div>
 
     <script>
+        let escrowBalance = 0;
+        let driverEarnings = 0;
+        const BUNDLE_VALUE = 22; // The total payout for the accepted loads
         let currentRole = 'driver';
         let currentStep = 'matches'; // matches -> map -> qrcode
         let map = null;
@@ -433,13 +436,26 @@ function previewImage(input, targetId) {
             const container = document.getElementById(targetId);
             container.innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover">`;
             
-            // SIMULATE OFFLINE QUEUEING
-            addToOfflineQueue(targetId, "Image saved locally. Will sync when online.");
+            // LOGIC: If this is the PICKUP photo, lock the money in Escrow
+            if (targetId === 'photo-preview-pickup') {
+                escrowBalance = BUNDLE_VALUE; 
+                
+                // Show the "Smart Escrow" alert
+                const alertBox = document.createElement('div');
+                alertBox.className = "fixed top-24 left-4 right-4 bg-slate-900 text-white p-4 rounded-2xl text-[11px] font-black z-[100] shadow-2xl animate-bounce flex items-center justify-between border-2 border-green-500";
+                alertBox.innerHTML = `
+                    <span>🛡️ SMART ESCROW ACTIVE</span>
+                    <span class="text-green-400">$${escrowBalance}.00 SECURED</span>
+                `;
+                document.body.appendChild(alertBox);
+                setTimeout(() => alertBox.remove(), 4000);
+                
+                addToOfflineQueue("PICKUP", "Funds secured in digital vault.");
+            }
         };
         reader.readAsDataURL(input.files[0]);
     }
 }
-
 function addToOfflineQueue(type, msg) {
     uploadQueue.push({type, time: new Date()});
     // Create a temporary "Offline Alert" UI
@@ -451,49 +467,68 @@ function addToOfflineQueue(type, msg) {
     // Remove alert after 3 seconds to simulate background process
     setTimeout(() => alertBox.remove(), 4000);
 }
-
 function showVerificationQR() {
     currentStep = 'qrcode';
     const content = document.getElementById('app-content');
     content.innerHTML = `
-        <div class="flex flex-col items-center pt-4">
-            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Step 2: Delivery Verification</h2>
+        <div class="flex flex-col items-center pt-4 animate-fade-in">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Step 2: Delivery & Release</h2>
             
             <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-blue-50 mb-6 w-full">
-                <p class="text-sm font-bold text-slate-700 mb-4 text-center">📸 Photo of Unloaded Items</p>
+                <p class="text-sm font-bold text-slate-700 mb-4 text-center italic">📸 Proof of Unloading</p>
                 <div id="photo-preview-unload" class="w-full h-40 bg-slate-50 rounded-3xl mb-4 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
-                     <span class="text-slate-400 text-xs">Waiting for Unload Photo</span>
+                     <span class="text-slate-400 text-xs">Awaiting Photo...</span>
                 </div>
                 <input type="file" id="camera-unload" accept="image/*" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-unload')">
-                <button onclick="document.getElementById('camera-unload').click()" class="w-full py-3 bg-blue-50 text-blue-600 font-bold rounded-2xl border border-blue-100 uppercase text-[10px]">
+                <button onclick="document.getElementById('camera-unload').click()" class="w-full py-3 bg-blue-50 text-blue-600 font-black rounded-2xl border border-blue-100 uppercase text-[10px]">
                     CAPTURE UNLOAD
                 </button>
             </div>
 
-            <div id="qrcode" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50"></div>
-            
-            <div class="mt-6 text-center">
-                <p class="font-black text-xl text-slate-800 italic">SECURE RELEASE</p>
-                <p class="text-slate-400 text-xs">Offline Sync Active: ${uploadQueue.length} Files Queued</p>
+            <div onclick="completePayment()" class="cursor-pointer group relative">
+                <div id="qrcode" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50 group-active:scale-95 transition-transform"></div>
+                <div class="absolute -bottom-2 bg-green-600 text-white text-[8px] font-black px-3 py-1 rounded-full left-1/2 -translate-x-1/2 shadow-lg whitespace-nowrap">
+                    CLICK QR TO RELEASE FUNDS
+                </div>
             </div>
         </div>
     `;
     
     new QRCode(document.getElementById("qrcode"), {
-        text: "ORDER_COMPLETE_SYNC_PENDING",
+        text: "PAYMENT_RELEASE_RN",
         width: 160,
         height: 160,
-        colorDark : "#16a34a",
+        colorDark : "#0f172a",
         colorLight : "#ffffff"
     });
-    
     document.getElementById('action-bar').style.display = "none";
+}
+    function completePayment() {
+    driverEarnings += escrowBalance;
+    escrowBalance = 0;
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+        <div class="flex flex-col items-center justify-center min-h-[500px] text-center p-6 animate-fade-in">
+            <div class="h-24 w-24 bg-green-500 rounded-full flex items-center justify-center text-5xl shadow-2xl mb-8 animate-bounce">💰</div>
+            <h1 class="text-3xl font-black text-slate-900 tracking-tighter italic uppercase">Payment Released</h1>
+            <div class="mt-10 w-full bg-slate-900 p-8 rounded-[3rem] text-white shadow-2xl border-t-4 border-green-500">
+                <p class="text-[9px] font-bold text-green-400 uppercase tracking-widest text-left">New Wallet Balance</p>
+                <h2 class="text-5xl font-black mt-2 text-left">$${driverEarnings}.00</h2>
+                <div class="mt-6 pt-4 border-t border-white/10 flex justify-between text-[10px] font-bold">
+                    <span>STATUS: SUCCESS</span>
+                    <span class="text-green-400">INSTANT TRANSFER ✅</span>
+                </div>
+            </div>
+            <button onclick="location.reload()" class="mt-12 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">Return to Home</button>
+        </div>
+    `;
 }
 
         // Initialize App
         window.onload = renderDriverMatches;
         // This tells the browser to start with the Role Selection/Profile screen
 window.onload = renderProfileSetup;
+
     </script>
 </body>
 </html>
