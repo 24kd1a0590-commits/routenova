@@ -50,485 +50,242 @@
         </div>
     </div>
 
-    <script>
-        let escrowBalance = 0;
-        let driverEarnings = 0;
-        const BUNDLE_VALUE = 22; // The total payout for the accepted loads
-        let currentRole = 'driver';
-        let currentStep = 'matches'; // matches -> map -> qrcode
-        let map = null;
-        let userProfile = { role: null, name: null, phone: null, details: {} };
+   <script>
+    // --- GLOBAL STATE ---
+    let escrowBalance = 0;
+    let driverEarnings = 0;
+    const BUNDLE_VALUE = 22; 
+    let currentRole = null; // Set during signup
+    let currentStep = 'matches'; 
+    let userProfile = { name: null, role: null };
+    let routingControl = null;
+    let map = null;
 
-function renderProfileSetup() {
-    const content = document.getElementById('app-content');
-    document.getElementById('action-bar').style.display = "none";
+    // --- 1. SIGNUP & ROLE SELECTION ---
+    function renderProfileSetup() {
+        const content = document.getElementById('app-content');
+        document.getElementById('action-bar').style.display = "none";
+        // Hide tabs during signup
+        document.querySelector('.flex.p-2.bg-slate-100').style.display = "none";
 
-    content.innerHTML = `
-        <div class="animate-fade-in p-2">
-            <div class="mb-8">
-                <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">Join RouteNova</h2>
-                <p class="text-slate-400 text-sm font-medium">Select your role to start.</p>
-            </div>
+        content.innerHTML = `
+            <div class="animate-fade-in p-2">
+                <div class="mb-8">
+                    <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">Join RouteNova</h2>
+                    <p class="text-slate-400 text-sm">Select your identity to continue.</p>
+                </div>
 
-            <div class="grid grid-cols-1 gap-4 mb-8">
-                <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all hover:border-green-500 group">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <h3 class="font-black text-xl text-slate-800">I am a Driver</h3>
-                            <p class="text-[10px] text-slate-400 uppercase font-bold mt-1 tracking-tight">Earn on return trips</p>
+                <div class="grid grid-cols-1 gap-4 mb-8">
+                    <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-black text-xl">I am a Driver</h3>
+                                <p class="text-[10px] text-slate-400 uppercase font-bold">Earn on return trips</p>
+                            </div>
+                            <span class="text-3xl">🚚</span>
                         </div>
-                        <span class="text-3xl">🚚</span>
                     </div>
-                </div>
 
-                <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all hover:border-blue-500 group">
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <h3 class="font-black text-xl text-slate-800">I am a Shipper</h3>
-                            <p class="text-[10px] text-slate-400 uppercase font-bold mt-1 tracking-tight">Send goods rurally</p>
-                        </div>
-                        <span class="text-3xl">📦</span>
-                    </div>
-                </div>
-            </div>
-
-            <div id="role-form" class="hidden animate-fade-in space-y-5 px-1">
-                <div class="h-px bg-slate-200 w-full my-6"></div>
-                
-                <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Full Name</label>
-                    <input type="text" id="u-name" placeholder="Enter Full Name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 focus:border-slate-900 outline-none font-bold">
-                </div>
-
-                <div id="driver-fields" class="hidden space-y-5">
-                    <div class="grid grid-cols-2 gap-4">
-                        <input type="text" id="u-vehicle" placeholder="Vehicle Type" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none text-sm">
-                        <input type="number" id="u-capacity" placeholder="Cap (kg)" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none text-sm">
-                    </div>
-                    
-                    <div class="p-5 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3 text-center">Required: Driving License</label>
-                        <div class="flex items-center gap-4">
-                            <div id="license-preview" class="h-14 w-20 bg-slate-50 rounded-xl border-2 flex items-center justify-center text-2xl">🪪</div>
-                            <input type="file" id="u-license" accept="image/*" class="hidden" onchange="document.getElementById('license-preview').innerHTML='✅'">
-                            <button onclick="document.getElementById('u-license').click()" class="flex-1 bg-slate-900 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest">Upload License</button>
+                    <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-black text-xl">I am a Shipper</h3>
+                                <p class="text-[10px] text-slate-400 uppercase font-bold">Send goods rurally</p>
+                            </div>
+                            <span class="text-3xl">📦</span>
                         </div>
                     </div>
                 </div>
 
-                <div id="shipper-fields" class="hidden">
-                    <input type="text" id="u-business" placeholder="Business/Farm Name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                <div id="role-form" class="hidden space-y-4">
+                    <input type="text" id="u-name" placeholder="Full Name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                    <button onclick="finalizeAuth()" class="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] shadow-xl">START SYSTEM</button>
                 </div>
-
-                <input type="tel" id="u-phone" placeholder="Phone Number" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none">
-
-                <button onclick="saveFinalProfile()" class="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] shadow-xl transition-all mt-4 transform active:scale-95">
-                    AUTHENTICATE & START
-                </button>
             </div>
-        </div>
-    `;
-}
-
-function selectRole(role) {
-    userProfile.role = role;
-    document.getElementById('role-form').classList.remove('hidden');
-    
-    // UI Highlight
-    const dCard = document.getElementById('role-driver');
-    const sCard = document.getElementById('role-shipper');
-    const dFields = document.getElementById('driver-fields');
-    const sFields = document.getElementById('shipper-fields');
-
-    if(role === 'driver') {
-        dCard.classList.add('border-green-500', 'bg-green-50');
-        sCard.classList.remove('border-blue-500', 'bg-blue-50');
-        dFields.classList.remove('hidden');
-        sFields.classList.add('hidden');
-    } else {
-        sCard.classList.add('border-blue-500', 'bg-blue-50');
-        dCard.classList.remove('border-green-500', 'bg-green-50');
-        sFields.classList.remove('hidden');
-        dFields.classList.add('hidden');
-    }
-}
-function saveFinalProfile() {
-    const name = document.getElementById('u-name').value;
-    const phone = document.getElementById('u-phone').value;
-
-    if(!name || !phone) {
-        alert("Security Error: Please fill all fields.");
-        return;
+        `;
     }
 
-    if(userProfile.role === 'driver') {
-        const licenseInput = document.getElementById('u-license');
-        // CHECK IF LICENSE IS UPLOADED
-        if(!licenseInput.files || licenseInput.files.length === 0) {
-            alert("Verification Failed: Driving License image is mandatory for drivers.");
+    function selectRole(role) {
+        userProfile.role = role;
+        document.getElementById('role-form').classList.remove('hidden');
+        document.getElementById('role-driver').className = role === 'driver' ? 'p-6 bg-green-50 border-2 border-green-500 rounded-[2.5rem]' : 'p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] opacity-50';
+        document.getElementById('role-shipper').className = role === 'shipper' ? 'p-6 bg-blue-50 border-2 border-blue-500 rounded-[2.5rem]' : 'p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] opacity-50';
+    }
+
+    function finalizeAuth() {
+        const name = document.getElementById('u-name').value;
+        if(!name) return alert("Please enter your name");
+        userProfile.name = name;
+        
+        // Show tabs now that role is fixed
+        document.querySelector('.flex.p-2.bg-slate-100').style.display = "flex";
+        
+        if(userProfile.role === 'driver') {
+            switchView('driver');
+        } else {
+            switchView('shipper');
+        }
+    }
+
+    // --- 2. THE NAVIGATION LOGIC ---
+    function switchView(role) {
+        // LOCK: If they chose driver at start, they cannot see shipper view and vice versa
+        if(userProfile.role && role !== userProfile.role) {
+            alert(`Access Denied: You are registered as a ${userProfile.role.toUpperCase()}`);
             return;
         }
-        simulateAuthentication();
-    } else {
-        // Shippers skip license auth for now
-        switchView('shipper');
-    }
-}
 
-function simulateAuthentication() {
-    const content = document.getElementById('app-content');
-    content.innerHTML = `
-        <div class="flex flex-col items-center justify-center min-h-[500px] text-center p-8 animate-fade-in">
-            <div class="relative w-28 h-28 mb-10">
-                <div class="absolute inset-0 border-8 border-slate-100 rounded-full"></div>
-                <div class="absolute inset-0 border-8 border-green-600 rounded-full border-t-transparent animate-spin"></div>
-                <div class="absolute inset-0 flex items-center justify-center text-4xl">🛡️</div>
-            </div>
-            <h2 class="text-2xl font-black text-slate-900 tracking-tight italic">Verifying Identity</h2>
-            <p class="text-slate-400 text-[10px] mt-3 uppercase font-bold tracking-[0.2em] leading-relaxed px-6">
-                Analyzing document and cross-referencing with National Transport Database...
-            </p>
-            
-            <div class="mt-12 w-full max-w-[220px] bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
-                <div class="bg-green-600 h-full animate-progress-fill"></div>
-            </div>
-        </div>
-    `;
-
-    // Delay entry into the app to simulate "AI processing"
-    setTimeout(() => { 
-        switchView('driver'); 
-    }, 3500);
-}
-
-        function switchView(role) {
-            currentRole = role;
-            currentStep = 'matches';
-            const driverTab = document.getElementById('tab-driver');
-            const shipperTab = document.getElementById('tab-shipper');
-            const btn = document.getElementById('primary-btn');
-            const status = document.getElementById('status-pill');
-
-            if (role === 'driver') {
-                driverTab.className = "flex-1 py-2 text-sm font-bold rounded-xl bg-white shadow-sm text-green-600";
-                shipperTab.className = "flex-1 py-2 text-sm font-bold rounded-xl text-slate-500";
-                status.innerText = "DRIVER ONLINE";
-                status.className = "bg-green-100 text-green-700 text-[10px] px-3 py-1 rounded-full font-bold";
-                btn.parentElement.style.display = "block";
-                renderDriverMatches();
-            } else {
-                shipperTab.className = "flex-1 py-2 text-sm font-bold rounded-xl bg-white shadow-sm text-blue-600";
-                driverTab.className = "flex-1 py-2 text-sm font-bold rounded-xl text-slate-500";
-                status.innerText = "SHIPPER MODE";
-                status.className = "bg-blue-100 text-blue-700 text-[10px] px-3 py-1 rounded-full font-bold";
-                btn.parentElement.style.display = "none";
-                renderShipperForm();
-            }
+        currentRole = role;
+        const btn = document.getElementById('primary-btn');
+        if (role === 'driver') {
+            renderDriverMatches();
+        } else {
+            renderShipperForm();
         }
+    }
 
-        function renderDriverMatches() {
-    const content = document.getElementById('app-content');
-    content.innerHTML = `
-        <div class="animate-fade-in">
-            <div class="bg-green-600 p-6 rounded-[2rem] shadow-xl mb-8 text-white">
-                <h2 class="text-sm font-bold opacity-80 uppercase mb-4">Set Your Return Destination</h2>
-                <div class="space-y-3">
-                    <div class="relative">
-                        <input type="text" id="destination-input" 
-                               placeholder="Where are you heading?" 
-                               class="w-full p-4 pl-12 rounded-2xl border-none text-slate-800 font-bold focus:ring-4 focus:ring-green-400 outline-none shadow-inner"
-                               value="Green Valley Village">
-                        <span class="absolute left-4 top-4 text-xl">📍</span>
-                    </div>
-                    <button onclick="findLoadsOnRoute()" class="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all flex justify-center items-center gap-2">
-                        🔍 FIND LOADS ON MY WAY
-                    </button>
+    function renderDriverMatches() {
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="animate-fade-in">
+                <div class="bg-green-600 p-6 rounded-[2rem] text-white mb-6">
+                    <p class="text-[10px] font-bold opacity-70 uppercase mb-2">Your Destination</p>
+                    <input type="text" id="dest" value="Green Valley Village" class="w-full p-4 rounded-2xl text-slate-900 font-bold outline-none mb-3">
+                    <button onclick="findLoads()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs">FIND MATCHES</button>
                 </div>
+                <div id="results"></div>
             </div>
+        `;
+        document.getElementById('action-bar').style.display = "none";
+    }
 
-            <div id="results-container">
-                <p class="text-center text-slate-400 text-sm italic mt-10 px-10">
-                    Enter your destination above to see matches along your return path.
-                </p>
-            </div>
-        </div>
-    `;
-    
-    // Hide the primary button initially until they search
-    document.getElementById('action-bar').style.display = "none";
-}
-// Mock Database of loads with specific coordinates
-const MOCK_LOADS = [
-    { id: 1, name: "4x Rice Sacks", pickup: "City Market Gate 4", lat: 12.9850, lng: 77.6050, pay: 15, weight: "40kg" },
-    { id: 2, name: "Construction Tools", pickup: "Hardware Row", lat: 12.9600, lng: 77.5800, pay: 7, weight: "12kg" },
-    { id: 3, name: "Organic Fertilizer", pickup: "Agri Depot", lat: 12.9900, lng: 77.6200, pay: 12, weight: "25kg" }
-];
+    function findLoads() {
+        const res = document.getElementById('results');
+        res.innerHTML = `
+            <div class="p-4 bg-white rounded-3xl border-2 border-green-500 mb-4" onclick="toggleLoad()">
+                <div class="flex justify-between items-center">
+                    <div><h3 class="font-black">Agri-Bundle #402</h3><p class="text-[10px] text-slate-400">Pickup: Nearby Hub</p></div>
+                    <p class="text-xl font-black text-green-600">$22</p>
+                </div>
+                <div id="check-box" class="mt-2 text-right text-xs font-bold text-slate-300 italic">Tap to select</div>
+            </div>`;
+    }
 
+    function toggleLoad() {
+        document.getElementById('check-box').innerText = "SELECTED ✅";
+        document.getElementById('action-bar').style.display = "block";
+    }
 
-function renderShipperForm() {
-    const content = document.getElementById('app-content');
-    content.innerHTML = `
-        <div class="animate-fade-in space-y-6">
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                <div class="flex justify-between items-start mb-6">
+    function handlePrimaryAction() {
+        if(currentStep === 'matches') showRouteMap();
+        else if(currentStep === 'map') showVerificationQR();
+    }
+
+    // --- 3. GOOGLE MAPS STYLE ROUTING ---
+    function showRouteMap() {
+        currentStep = 'map';
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="animate-fade-in">
+                <h2 class="text-xs font-black text-slate-400 uppercase text-center mb-4">Route to Destination</h2>
+                <div id="map" style="height: 400px;" class="shadow-xl mb-6"></div>
+                <div class="bg-white p-4 rounded-2xl border flex items-center justify-between mb-4">
                     <div>
-                        <h2 class="text-lg font-black text-slate-800 tracking-tight">Active Tracking</h2>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Order #RN-9921 • 4x Rice Sacks</p>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase">Est. Trip Time</p>
+                        <p class="font-black">24 Mins (Traffic Light)</p>
                     </div>
-                    <span class="bg-blue-100 text-blue-600 text-[10px] px-3 py-1 rounded-full font-black animate-pulse">LIVE</span>
+                    <button onclick="document.getElementById('cam-1').click()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold">PICKUP CAPTURE</button>
+                    <input type="file" id="cam-1" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-pickup')">
                 </div>
-
-                <div id="shipper-map" class="h-48 w-full rounded-3xl bg-slate-100 mb-6 shadow-inner"></div>
-
-                <div class="relative flex justify-between items-center px-2">
-                    <div class="absolute h-0.5 bg-slate-100 w-full top-3 -z-10"></div>
-                    <div class="absolute h-0.5 bg-blue-500 w-2/3 top-3 -z-10 transition-all"></div>
-                    
-                    <div class="flex flex-col items-center gap-2">
-                        <div class="h-6 w-6 bg-blue-600 rounded-full border-4 border-white shadow-sm"></div>
-                        <span class="text-[8px] font-black text-slate-400">PICKUP</span>
-                    </div>
-                    <div class="flex flex-col items-center gap-2">
-                        <div class="h-6 w-6 bg-blue-600 rounded-full border-4 border-white shadow-sm"></div>
-                        <span class="text-[8px] font-black text-blue-600">IN TRANSIT</span>
-                    </div>
-                    <div class="flex flex-col items-center gap-2">
-                        <div class="h-6 w-6 bg-white border-2 border-slate-200 rounded-full shadow-sm"></div>
-                        <span class="text-[8px] font-black text-slate-400">VILLAGE</span>
-                    </div>
-                </div>
-
-                <div class="mt-6 pt-6 border-t border-slate-50 flex justify-between items-center">
-                    <div>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase">Estimated Delivery</p>
-                        <p class="font-black text-slate-700">~ 42 minutes</p>
-                    </div>
-                    <button class="bg-slate-900 text-white text-[10px] font-bold px-4 py-2 rounded-xl">MESSAGE DRIVER</button>
-                </div>
+                <div id="photo-preview-pickup" class="w-full h-20 overflow-hidden rounded-xl"></div>
             </div>
+        `;
 
-            <button class="w-full py-4 bg-slate-100 border-2 border-dashed border-slate-200 rounded-3xl text-slate-500 font-bold flex items-center justify-center gap-2 hover:bg-white transition-all">
-                <span>+</span> Post New Backhaul Request
-            </button>
-        </div>
-    `;
+        initLiveRouting();
+        document.getElementById('primary-btn').innerText = "ARRIVED AT UNLOAD";
+    }
 
-    // Initialize the Tracking Map for the Shipper
-    setTimeout(() => {
-        const sMap = L.map('shipper-map', { zoomControl: false }).setView([12.9750, 77.5980], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sMap);
-        
-        // Driver's moving icon (In a real app, this updates via Websockets/Firebase)
-        const driverIcon = L.divIcon({
-            className: 'bg-blue-600 w-4 h-4 rounded-full border-2 border-white shadow-lg shadow-blue-200',
-            iconSize: [16, 16]
-        });
+    function initLiveRouting() {
+        // Default start (City Center) if GPS fails
+        let startLat = 12.9716, startLng = 77.5946; 
+        let destLat = 12.8500, destLng = 77.6500; // Simulating "Green Valley Village"
 
-        L.marker([12.9750, 77.5980], { icon: driverIcon }).addTo(sMap).bindPopup('Driver is moving').openPopup();
-        L.marker([13.0500, 77.7500]).addTo(sMap); // Destination Village
-    }, 200);
-}
-        function handlePrimaryAction() {
-            if (currentStep === 'matches') {
-                showRouteMap();
-            } else if (currentStep === 'map') {
-                showVerificationQR();
-            }
+        map = L.map('map').setView([startLat, startLng], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Try to get real GPS location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                startLat = pos.coords.latitude;
+                startLng = pos.coords.longitude;
+                
+                // Add Marker for Starting Position
+                L.marker([startLat, startLng]).addTo(map).bindPopup("Your Location").openPopup();
+                // Add Marker for Destination
+                L.marker([destLat, destLng]).addTo(map).bindPopup("Village Destination");
+
+                // Draw the Path (Line)
+                const path = L.polyline([[startLat, startLng], [destLat, destLng]], {color: '#16a34a', weight: 5, opacity: 0.7}).addTo(map);
+                map.fitBounds(path.getBounds());
+            });
         }
-let selectedBundles = [];
-
-function findLoadsOnRoute() {
-    const dest = document.getElementById('destination-input').value;
-    const results = document.getElementById('results-container');
-    const actionBar = document.getElementById('action-bar');
-    selectedBundles = []; // Reset selections
-    
-    results.innerHTML = `<div class="flex flex-col items-center mt-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div></div>`;
-
-    setTimeout(() => {
-        results.innerHTML = `<h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest px-2">Available for Micropooling</h3>`;
-        
-        MOCK_LOADS.forEach(load => {
-            const extraDist = (Math.random() * 2.5).toFixed(1);
-            results.innerHTML += `
-                <div id="load-${load.id}" onclick="toggleBundle(${load.id}, ${load.pay})" class="bg-white p-5 rounded-3xl border-2 border-slate-50 shadow-sm cursor-pointer transition-all mb-4 relative overflow-hidden">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <h3 class="font-black text-slate-800 text-lg">${load.name}</h3>
-                            <p class="text-[11px] text-slate-400 font-medium">📍 ${load.pickup}</p>
-                            <p class="text-[10px] text-orange-500 font-bold mt-2">+${extraDist} km deviation</p>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-2xl font-black text-green-600">$${load.pay}</span>
-                            <div class="select-indicator mt-2 h-6 w-6 border-2 border-slate-200 rounded-full ml-auto"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        actionBar.style.display = "block";
-        updatePrimaryButton();
-    }, 800);
-}
-
-function toggleBundle(id, pay) {
-    const element = document.getElementById(`load-${id}`);
-    const index = selectedBundles.indexOf(id);
-    
-    if (index > -1) {
-        selectedBundles.splice(index, 1);
-        element.classList.remove('border-green-500', 'bg-green-50');
-    } else {
-        selectedBundles.push(id);
-        element.classList.add('border-green-500', 'bg-green-50');
     }
-    updatePrimaryButton();
-}
 
-function updatePrimaryButton() {
-    const btn = document.getElementById('primary-btn');
-    if (selectedBundles.length === 0) {
-        btn.innerText = "SELECT BUNDLES";
-        btn.disabled = true;
-        btn.classList.add('opacity-50');
-    } else {
-        btn.disabled = false;
-        btn.classList.remove('opacity-50');
-        const total = selectedBundles.length * 12; // Simple math for demo
-        btn.innerText = `ACCEPT ${selectedBundles.length} BUNDLES ($${total})`;
+    function previewImage(input, targetId) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById(targetId).innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover">`;
+                if(targetId === 'photo-preview-pickup') {
+                    escrowBalance = BUNDLE_VALUE;
+                    alert("🛡️ SMART ESCROW: $22.00 Secured from Shipper!");
+                }
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
     }
-}
 
-// Optimized Map Logic for Micropooling
-
-
-        // Global storage to simulate offline queue
-let uploadQueue = [];
-
-function showRouteMap() {
-    currentStep = 'map';
-    const content = document.getElementById('app-content');
-    content.innerHTML = `
-        <h2 class="text-lg font-bold mb-4 italic text-slate-500 uppercase text-xs tracking-widest">Step 1: Secure Pickup</h2>
-        
-        <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-green-50 mb-6">
-            <p class="text-sm font-bold text-slate-700 mb-4 text-center">📸 Take a Photo of the Loaded Goods</p>
-            <div id="photo-preview-pickup" class="w-full h-48 bg-slate-100 rounded-3xl mb-4 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
-                <span class="text-slate-400 text-xs">No Photo Captured</span>
+    // --- 4. THE REST OF THE FLOW ---
+    function showVerificationQR() {
+        currentStep = 'qrcode';
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="flex flex-col items-center pt-4 animate-fade-in text-center">
+                <h2 class="text-xs font-black text-slate-400 uppercase mb-8">Proof of Delivery</h2>
+                <div onclick="completePayment()" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50">
+                    <div id="qrcode"></div>
+                </div>
+                <p class="mt-6 font-black italic">SCAN TO RELEASE FUNDS</p>
             </div>
-            <input type="file" id="camera-pickup" accept="image/*" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-pickup')">
-            <button onclick="document.getElementById('camera-pickup').click()" class="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl border border-slate-200">
-                OPEN CAMERA
-            </button>
-        </div>
-
-        <div id="map" class="shadow-xl"></div>
-    `;
-    
-    setTimeout(initMap, 200); // Your existing map init logic
-    document.getElementById('primary-btn').innerText = "PROCEED TO UNLOAD";
-}
-
-function previewImage(input, targetId) {
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const container = document.getElementById(targetId);
-            container.innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover">`;
-            
-            // LOGIC: If this is the PICKUP photo, lock the money in Escrow
-            if (targetId === 'photo-preview-pickup') {
-                escrowBalance = BUNDLE_VALUE; 
-                
-                // Show the "Smart Escrow" alert
-                const alertBox = document.createElement('div');
-                alertBox.className = "fixed top-24 left-4 right-4 bg-slate-900 text-white p-4 rounded-2xl text-[11px] font-black z-[100] shadow-2xl animate-bounce flex items-center justify-between border-2 border-green-500";
-                alertBox.innerHTML = `
-                    <span>🛡️ SMART ESCROW ACTIVE</span>
-                    <span class="text-green-400">$${escrowBalance}.00 SECURED</span>
-                `;
-                document.body.appendChild(alertBox);
-                setTimeout(() => alertBox.remove(), 4000);
-                
-                addToOfflineQueue("PICKUP", "Funds secured in digital vault.");
-            }
-        };
-        reader.readAsDataURL(input.files[0]);
+        `;
+        new QRCode(document.getElementById("qrcode"), { text: "RELEASE", width: 180, height: 180 });
+        document.getElementById('action-bar').style.display = "none";
     }
-}
-function addToOfflineQueue(type, msg) {
-    uploadQueue.push({type, time: new Date()});
-    // Create a temporary "Offline Alert" UI
-    const alertBox = document.createElement('div');
-    alertBox.className = "fixed top-20 left-4 right-4 bg-orange-500 text-white p-3 rounded-2xl text-[10px] font-bold z-[100] animate-bounce shadow-lg flex justify-between";
-    alertBox.innerHTML = `<span>📡 OFFLINE: ${msg}</span><span class="opacity-50">SYNCING...</span>`;
-    document.body.appendChild(alertBox);
-    
-    // Remove alert after 3 seconds to simulate background process
-    setTimeout(() => alertBox.remove(), 4000);
-}
-function showVerificationQR() {
-    currentStep = 'qrcode';
-    const content = document.getElementById('app-content');
-    content.innerHTML = `
-        <div class="flex flex-col items-center pt-4 animate-fade-in">
-            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Step 2: Delivery & Release</h2>
-            
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-blue-50 mb-6 w-full">
-                <p class="text-sm font-bold text-slate-700 mb-4 text-center italic">📸 Proof of Unloading</p>
-                <div id="photo-preview-unload" class="w-full h-40 bg-slate-50 rounded-3xl mb-4 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
-                     <span class="text-slate-400 text-xs">Awaiting Photo...</span>
-                </div>
-                <input type="file" id="camera-unload" accept="image/*" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-unload')">
-                <button onclick="document.getElementById('camera-unload').click()" class="w-full py-3 bg-blue-50 text-blue-600 font-black rounded-2xl border border-blue-100 uppercase text-[10px]">
-                    CAPTURE UNLOAD
-                </button>
-            </div>
 
-            <div onclick="completePayment()" class="cursor-pointer group relative">
-                <div id="qrcode" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50 group-active:scale-95 transition-transform"></div>
-                <div class="absolute -bottom-2 bg-green-600 text-white text-[8px] font-black px-3 py-1 rounded-full left-1/2 -translate-x-1/2 shadow-lg whitespace-nowrap">
-                    CLICK QR TO RELEASE FUNDS
-                </div>
-            </div>
-        </div>
-    `;
-    
-    new QRCode(document.getElementById("qrcode"), {
-        text: "PAYMENT_RELEASE_RN",
-        width: 160,
-        height: 160,
-        colorDark : "#0f172a",
-        colorLight : "#ffffff"
-    });
-    document.getElementById('action-bar').style.display = "none";
-}
     function completePayment() {
-    driverEarnings += escrowBalance;
-    escrowBalance = 0;
-    const content = document.getElementById('app-content');
-    content.innerHTML = `
-        <div class="flex flex-col items-center justify-center min-h-[500px] text-center p-6 animate-fade-in">
-            <div class="h-24 w-24 bg-green-500 rounded-full flex items-center justify-center text-5xl shadow-2xl mb-8 animate-bounce">💰</div>
-            <h1 class="text-3xl font-black text-slate-900 tracking-tighter italic uppercase">Payment Released</h1>
-            <div class="mt-10 w-full bg-slate-900 p-8 rounded-[3rem] text-white shadow-2xl border-t-4 border-green-500">
-                <p class="text-[9px] font-bold text-green-400 uppercase tracking-widest text-left">New Wallet Balance</p>
-                <h2 class="text-5xl font-black mt-2 text-left">$${driverEarnings}.00</h2>
-                <div class="mt-6 pt-4 border-t border-white/10 flex justify-between text-[10px] font-bold">
-                    <span>STATUS: SUCCESS</span>
-                    <span class="text-green-400">INSTANT TRANSFER ✅</span>
+        const content = document.getElementById('app-content');
+        content.innerHTML = `<div class="p-10 text-center animate-fade-in">
+            <div class="text-6xl mb-6">💰</div>
+            <h1 class="text-3xl font-black italic">PAID $22.00</h1>
+            <p class="text-slate-400 mt-2">Instant transfer to your wallet successful.</p>
+            <button onclick="location.reload()" class="mt-10 text-xs font-bold underline">BACK TO START</button>
+        </div>`;
+    }
+
+    function renderShipperForm() {
+        document.getElementById('app-content').innerHTML = `
+            <div class="bg-blue-600 p-8 rounded-[3rem] text-white animate-fade-in shadow-2xl">
+                <h2 class="text-2xl font-black italic mb-4">Shipper Panel</h2>
+                <p class="text-sm opacity-80 mb-6">Monitor your rural shipments in real-time.</p>
+                <div class="bg-white/10 p-4 rounded-2xl border border-white/20">
+                    <p class="text-[10px] uppercase font-bold tracking-widest">Active Escrow</p>
+                    <p class="text-3xl font-black">$0.00</p>
                 </div>
             </div>
-            <button onclick="location.reload()" class="mt-12 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">Return to Home</button>
-        </div>
-    `;
-}
+        `;
+    }
 
-        // Initialize App
-        window.onload = renderDriverMatches;
-        // This tells the browser to start with the Role Selection/Profile screen
-window.onload = renderProfileSetup;
-
-    </script>
+    window.onload = renderProfileSetup;
+</script>
 </body>
 </html>
