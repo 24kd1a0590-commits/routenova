@@ -146,69 +146,72 @@
                 <div id="results"></div>
             </div>`;
     }
-
- function findLoads() {
+function findLoads() {
     const res = document.getElementById('results');
-    // We define different base prices for the new bundles
-    const price1 = 22; 
-    const price2 = 18;
-    const price3 = 35;
+    // Weights in KG for the capacity simulation
+    const loads = [
+        { id: 402, name: "Agri-Bundle", detail: "4x Rice Sacks", weight: 120, price: 22, color: "green" },
+        { id: 109, name: "Seed Batch", detail: "2x Seed Crates", weight: 45, price: 18, color: "blue" },
+        { id: 88, name: "Bio-Fertilizer", detail: "10x Compost Bags", weight: 250, price: 35, color: "orange" }
+    ];
 
     res.innerHTML = `
         <div class="animate-fade-in space-y-4">
-            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 text-center">3 Loads Found on Your Route</h3>
+            <div id="capacity-container" class="hidden bg-white p-4 rounded-3xl shadow-sm border border-slate-100 mb-6">
+                <div class="flex justify-between mb-2 px-2">
+                    <span class="text-[9px] font-black text-slate-400 uppercase">Truck Capacity (500kg Max)</span>
+                    <span id="cap-text" class="text-[9px] font-black text-slate-900">0%</span>
+                </div>
+                <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                    <div id="cap-bar" class="bg-green-500 h-full transition-all duration-700" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 text-center">Select a load to see capacity</h3>
             
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-green-500 transition-all cursor-pointer" onclick="selectBundle(this, ${price1})">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="bg-green-100 text-green-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">Verified</span>
-                            <h3 class="font-black text-slate-800 text-lg italic">Agri-Bundle #402</h3>
+            ${loads.map(load => `
+                <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-slate-200 transition-all cursor-pointer bundle-card" 
+                     onclick="selectBundle(this, ${load.price}, ${load.weight})">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="bg-${load.color}-100 text-${load.color}-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">#${load.id}</span>
+                                <h3 class="font-black text-slate-800 text-lg italic">${load.name}</h3>
+                            </div>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">${load.detail} (${load.weight}kg)</p>
                         </div>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 4x Rice Sacks (120kg)</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-2xl font-black text-green-600">${formatCurrency(price1)}</p>
-                        <p class="text-[8px] text-slate-300 font-bold uppercase">Escrow Ready</p>
+                        <div class="text-right">
+                            <p class="text-2xl font-black text-green-600">${formatCurrency(load.price)}</p>
+                            <p class="text-[8px] text-slate-300 font-bold uppercase">Escrow Ready</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-green-500 transition-all cursor-pointer" onclick="selectBundle(this, ${price2})">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="bg-blue-100 text-blue-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">Priority</span>
-                            <h3 class="font-black text-slate-800 text-lg italic">Seed Batch #109</h3>
-                        </div>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 2x Seed Crates (45kg)</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-2xl font-black text-green-600">${formatCurrency(price2)}</p>
-                        <p class="text-[8px] text-slate-300 font-bold uppercase text-nowrap">Instant Pay</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-green-500 transition-all cursor-pointer" onclick="selectBundle(this, ${price3})">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="bg-orange-100 text-orange-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">Heavy Load</span>
-                            <h3 class="font-black text-slate-800 text-lg italic">Bio-Fertilizer #88</h3>
-                        </div>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 10x Compost Bags (250kg)</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-2xl font-black text-green-600">${formatCurrency(price3)}</p>
-                        <p class="text-[8px] text-slate-300 font-bold uppercase text-nowrap">Escrow Ready</p>
-                    </div>
-                </div>
-            </div>
+            `).join('')}
         </div>
     `;
 }
+function findLoads() {
+        // ... (the code that renders the bundle cards) ...
+    }
 
+    // --- PASTE THE NEW SELECTBUNDLE CODE HERE ---
+    function selectBundle(element, price, weight) {
+        // 1. Highlight selection
+        document.querySelectorAll('.bundle-card').forEach(b => b.style.borderColor = 'transparent');
+        element.style.borderColor = '#16a34a';
+
+        // 2. Show and Update Capacity Bar
+        const MAX_CAP = 500; 
+        const percentage = (weight / MAX_CAP) * 100;
+        
+        document.getElementById('capacity-container').classList.remove('hidden');
+        document.getElementById('cap-bar').style.width = percentage + '%';
+        document.getElementById('cap-text').innerText = Math.round(percentage) + '% Full';
+
+        // 3. Update Global State
+        window.SELECTED_PRICE_USD = price; 
+        document.getElementById('action-bar').style.display = 'block';
+    }
 // Add this helper to update the global price when a bundle is selected
 function selectBundle(element, price) {
     // Visual feedback for selection
