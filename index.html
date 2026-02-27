@@ -67,6 +67,10 @@ const MAX_CAP = 500; // Truck Limit
     let destPos = { lat: 12.8500, lng: 77.6500 };
     let isMoving = false;
     let map = null;
+    let isEscrowLocked = false;
+let isPaymentReleased = false;
+let pickupPhotoData = null; // Stores the image to show the shipper
+let deliveryStep = 'awaiting_pickup'; // 'awaiting_pickup' -> 'in_transit' -> 'completed'
 
     function formatCurrency(amountUSD) {
         const inrValue = (amountUSD * USD_TO_INR);
@@ -349,11 +353,19 @@ function showRouteMap() {
 }
 
     function previewPickup(input) {
-        if (input.files && input.files[0]) {
-            escrowBalance = BUNDLE_VALUE_USD;
-            alert(`🛡️ SMART ESCROW SECURED: ${formatCurrency(BUNDLE_VALUE_USD)} locked.`);
-        }
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            pickupPhotoData = e.target.result; // Capture the image
+            isEscrowLocked = true;
+            deliveryStep = 'in_transit';
+            
+            alert(`🛡️ ESCROW TRIGGERED: ${formatCurrency(totalPriceUSD || 22)} is now locked in a Smart Contract.`);
+            showRouteMap(); // Move to the map view
+        };
+        reader.readAsDataURL(input.files[0]);
     }
+}
 
     function showVerificationQR() {
         currentStep = 'qrcode';
@@ -380,71 +392,85 @@ function showRouteMap() {
     }
 
     function completePayment() {
-        isMoving = false;
-        document.getElementById('app-content').innerHTML = `
-            <div class="p-10 text-center animate-fade-in">
-                <div class="text-6xl mb-8">💰</div>
-                <h1 class="text-4xl font-black italic tracking-tighter uppercase">PAID ${formatCurrency(BUNDLE_VALUE_USD)}</h1>
-                <p class="text-slate-400 font-bold mt-4 uppercase text-[10px]">Instant UPI Settlement Successful</p>
-                <button onclick="location.reload()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">FINISH TRIP</button>
-            </div>`;
-    }
+    isPaymentReleased = true;
+    deliveryStep = 'completed';
+    isMoving = false;
+    
+    document.getElementById('app-content').innerHTML = `
+        <div class="p-10 text-center animate-fade-in">
+            <div class="text-6xl mb-8">✅</div>
+            <h1 class="text-4xl font-black italic tracking-tighter uppercase">FUNDS RELEASED</h1>
+            <p class="text-slate-400 font-bold mt-4 uppercase text-[10px]">Handshake Verified. UPI Settlement Sent.</p>
+            <button onclick="location.reload()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">START NEW MISSION</button>
+        </div>`;
+}
 
     // --- 5. SHIPPER VIEW ---
   let pathHistory = []; // Global to store coordinates the driver has touched
 
-function renderShipperView() {
+
+  function renderShipperView() {
     const content = document.getElementById('app-content');
     document.getElementById('action-bar').style.display = "none";
 
+    let statusHtml = "";
+    if (isPaymentReleased) {
+        statusHtml = `<span class="bg-green-600 text-white text-[10px] px-3 py-1 rounded-full font-black">DELIVERED & PAID</span>`;
+    } else if (isEscrowLocked) {
+        statusHtml = `<span class="bg-orange-500 text-white text-[10px] px-3 py-1 rounded-full font-black animate-pulse">IN TRANSIT</span>`;
+    } else {
+        statusHtml = `<span class="bg-slate-200 text-slate-500 text-[10px] px-3 py-1 rounded-full font-black">WAITING FOR PICKUP</span>`;
+    }
+
     content.innerHTML = `
-        <div class="animate-fade-in space-y-6">
+        <div class="animate-fade-in space-y-4">
             <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                <div class="flex justify-between items-start mb-6">
-                    <div>
-                        <h2 class="text-lg font-black text-slate-800 tracking-tight italic">Breadcrumb Trace</h2>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Real-Time Path Auditing</p>
-                    </div>
-                    <span id="live-indicator" class="bg-green-100 text-green-600 text-[10px] px-3 py-1 rounded-full font-black animate-pulse">GPS ACTIVE</span>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-lg font-black italic">Consignment Hub</h2>
+                    ${statusHtml}
                 </div>
 
-                <div id="shipper-map" class="h-64 w-full rounded-3xl bg-slate-100 mb-6 shadow-inner border-4 border-white"></div>
+                ${isEscrowLocked ? `
+                <div class="mb-6 animate-fade-in">
+                    <p class="text-[8px] font-black text-slate-400 uppercase mb-2 ml-2">Verification Photo from Driver</p>
+                    <div class="h-32 w-full rounded-3xl overflow-hidden border-4 border-white shadow-md">
+                        <img src="${pickupPhotoData}" class="w-full h-full object-cover">
+                    </div>
+                </div>
+                ` : ''}
+
+                <div id="shipper-map" class="h-48 w-full rounded-3xl bg-slate-100 mb-6"></div>
                 
-                <div class="grid grid-cols-2 gap-4 bg-slate-900 p-5 rounded-[2rem] text-white">
-                    <div>
-                        <p class="text-[8px] text-slate-400 font-black uppercase mb-1">Distance Covered</p>
-                        <p id="dist-covered" class="text-lg font-black text-green-400">0.0 km</p>
+                <div class="bg-slate-900 p-6 rounded-[2rem] text-white">
+                    <div class="flex justify-between mb-4">
+                         <div>
+                            <p class="text-[8px] text-slate-400 uppercase font-black">Escrow Status</p>
+                            <p class="font-bold ${isPaymentReleased ? 'text-green-400' : 'text-orange-400'}">
+                                ${isPaymentReleased ? 'Payment Settled' : (isEscrowLocked ? 'Funds Locked' : 'Awaiting Driver')}
+                            </p>
+                         </div>
+                         <div class="text-right">
+                            <p class="text-[8px] text-slate-400 uppercase font-black">Amount</p>
+                            <p class="font-black text-xl">${formatCurrency(totalPriceUSD || 22)}</p>
+                         </div>
                     </div>
-                    <div class="text-right">
-                        <p class="text-[8px] text-slate-400 font-black uppercase mb-1">Path Integrity</p>
-                        <p class="text-lg font-black text-blue-400">VERIFIED</p>
-                    </div>
+                    ${isPaymentReleased ? `
+                        <div class="bg-green-500/20 p-3 rounded-2xl border border-green-500/30 text-center">
+                            <p class="text-[10px] font-bold text-green-400 italic">Receipt #RN-TRACE-001 Confirmed</p>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         </div>`;
 
-    setTimeout(() => {
-        const sMap = L.map('shipper-map', { zoomControl: false }).setView([driverPos.lat, driverPos.lng], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sMap);
-        
-        // 1. Planned Route (Faint line)
-        L.polyline([[driverPos.lat, driverPos.lng], [destPos.lat, destPos.lng]], {
-            color: '#cbd5e1', 
-            weight: 4,
-            dashArray: '10, 10'
-        }).addTo(sMap);
-
-        // 2. Actual Movement Trace (Solid bold line)
-        const traceLine = L.polyline([], { color: '#2563eb', weight: 6, lineCap: 'round' }).addTo(sMap);
-        
-        const truckIcon = L.divIcon({ className: 'bg-blue-600 w-4 h-4 rounded-full border-4 border-white shadow-xl' });
-        const driverMarker = L.marker([driverPos.lat, driverPos.lng], { icon: truckIcon }).addTo(sMap);
-
-        // Reset history for fresh demo
-        pathHistory = [[driverPos.lat, driverPos.lng]];
-        
-        startBreadcrumbTracking(driverMarker, traceLine, sMap);
-    }, 300);
+    // Re-render map only if we are in transit
+    if (isEscrowLocked || isPaymentReleased) {
+        setTimeout(() => {
+            const sMap = L.map('shipper-map', { zoomControl: false }).setView([driverPos.lat, driverPos.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sMap);
+            L.polyline([[driverPos.lat, driverPos.lng], [destPos.lat, destPos.lng]], {color: '#2563eb', weight: 4}).addTo(sMap);
+        }, 300);
+    }
 }
 function startSimulatedTracking(marker, mapInstance) {
     let step = 0;
