@@ -400,43 +400,23 @@ function showRouteMap() {
     // --- 5. SHIPPER VIEW ---
   let pathHistory = []; // Global to store coordinates the driver has touched
 function renderShipperView() {
+    const state = getState();
+    const db = getDB();
     const content = document.getElementById('app-content');
-    document.getElementById('action-bar').style.display = "none";
+
+    const notificationHtml = state.notification ? `
+        <div class="bg-blue-600 text-white p-4 rounded-2xl mb-4 animate-bounce">
+            ${state.notification}
+        </div>` : '';
 
     content.innerHTML = `
-        <div class="animate-fade-in space-y-6">
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                <h2 class="text-xl font-black italic mb-6 tracking-tighter text-blue-600">Dispatch New Load</h2>
-                
-                <div class="space-y-4">
-                    <input type="text" id="s-name" placeholder="Type of Load (e.g., Organic Wheat)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-                    
-                    <div class="flex gap-2">
-                        <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-                        <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-                    </div>
-
-                    <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-
-                    <button onclick="broadcastLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
-                        BROADCAST TO DRIVERS
-                    </button>
-                </div>
-            </div>
-
-            <div class="px-2">
-                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 text-center">Your Active Dispatches</h3>
-                <div id="shipper-list" class="space-y-3">
-                    ${globalShipments.map(s => `
-                        <div class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
-                            <div>
-                                <p class="font-black text-slate-800">${s.name}</p>
-                                <p class="text-[9px] font-bold text-blue-500 uppercase">${s.weight}kg • ${s.status.toUpperCase()}</p>
-                            </div>
-                            <p class="font-black text-slate-900">${formatCurrency(s.price)}</p>
-                        </div>
-                    `).join('')}
-                </div>
+        <div class="p-4">
+            ${notificationHtml}
+            ${state.pickupPhoto ? `<img src="${state.pickupPhoto}" class="rounded-2xl h-40 w-full object-cover">` : ''}
+            
+            <h3 class="mt-4 font-bold">Database Logs:</h3>
+            <div class="text-[8px] bg-slate-100 p-2 rounded">
+                ${JSON.stringify(db)}
             </div>
         </div>
     `;
