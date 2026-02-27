@@ -152,8 +152,6 @@ const MAX_CAP = 500; // Truck Limit
 
  function findLoads() {
     const res = document.getElementById('results');
-    
-    // We define our bundle data objects here
     const loads = [
         { id: 402, name: "Agri-Bundle", detail: "4x Rice Sacks", weight: 120, price: 22, color: "green" },
         { id: 109, name: "Seed Batch", detail: "2x Seed Crates", weight: 45, price: 18, color: "blue" },
@@ -162,9 +160,34 @@ const MAX_CAP = 500; // Truck Limit
 
     res.innerHTML = `
         <div class="animate-fade-in space-y-4">
+            <div id="impact-card" class="hidden bg-slate-900 p-6 rounded-[2.5rem] shadow-2xl text-white mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="text-[10px] font-black uppercase text-green-400 tracking-widest">Efficiency Dashboard</h4>
+                    <span class="text-[10px] font-bold text-slate-500 uppercase">Live Metrics</span>
+                </div>
+                
+                <div class="flex items-end justify-around h-24 gap-4 px-2">
+                    <div class="flex flex-col items-center flex-1">
+                        <div id="graph-co2" class="bg-green-500 w-full rounded-t-lg transition-all duration-700" style="height: 0%"></div>
+                        <p class="text-[7px] mt-2 font-black uppercase text-slate-400">CO2</p>
+                    </div>
+                    <div class="flex flex-col items-center flex-1">
+                        <div id="graph-fuel" class="bg-blue-500 w-full rounded-t-lg transition-all duration-700" style="height: 0%"></div>
+                        <p class="text-[7px] mt-2 font-black uppercase text-slate-400">Fuel</p>
+                    </div>
+                    <div class="flex flex-col items-center flex-1">
+                        <div id="graph-profit" class="bg-yellow-500 w-full rounded-t-lg transition-all duration-700" style="height: 0%"></div>
+                        <p class="text-[7px] mt-2 font-black uppercase text-slate-400">Profit</p>
+                    </div>
+                </div>
+                
+                <div id="green-metrics-text" class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-800">
+                    </div>
+            </div>
+
             <div id="capacity-container" class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 mb-6">
                 <div class="flex justify-between mb-2 px-2">
-                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Current Load Capacity (500kg Max)</span>
+                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Payload Capacity</span>
                     <span id="cap-text" class="text-[9px] font-black text-slate-900">0%</span>
                 </div>
                 <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
@@ -172,7 +195,7 @@ const MAX_CAP = 500; // Truck Limit
                 </div>
             </div>
 
-            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 text-center italic">Available Bundles on Route</h3>
+            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 text-center italic">Select Bundles to Optimize</h3>
             
             ${loads.map(load => `
                 <div class="bundle-card bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-slate-200 transition-all cursor-pointer" 
@@ -224,25 +247,49 @@ function selectBundle(element, price, weight, name) {
     // Update UI
     updateCapacityUI();
 }
-
 function updateCapacityUI() {
     const percentage = (totalWeight / MAX_CAP) * 100;
     const bar = document.getElementById('cap-bar');
     const text = document.getElementById('cap-text');
     const actionBtn = document.getElementById('primary-btn');
     const actionBar = document.getElementById('action-bar');
+    const impactCard = document.getElementById('impact-card');
 
+    // UI Updates
     bar.style.width = percentage + '%';
     text.innerText = `${totalWeight}kg / ${MAX_CAP}kg (${Math.round(percentage)}%)`;
-
-    // Visual warning for heavy loads
     bar.className = percentage > 85 ? "bg-orange-500 h-full transition-all" : "bg-green-500 h-full transition-all";
 
     if (selectedBundles.length > 0) {
+        impactCard.classList.remove('hidden');
         actionBar.style.display = 'block';
+        
+        // 🌿 GREEN MATH
+        // Based on average empty trip distance: 1.2L fuel saved per bundle accepted
+        const fuelSaved = (selectedBundles.length * 1.2).toFixed(1);
+        const co2Saved = (fuelSaved * 2.64).toFixed(1);
+        
+        // Update Graph Bars (Heights)
+        document.getElementById('graph-co2').style.height = Math.min(percentage + 10, 100) + '%';
+        document.getElementById('graph-fuel').style.height = Math.min((fuelSaved * 20), 100) + '%';
+        document.getElementById('graph-profit').style.height = Math.min((totalPriceUSD * 2), 100) + '%';
+
+        // Update Impact Text
+        document.getElementById('green-metrics-text').innerHTML = `
+            <div>
+                <p class="text-[8px] font-black text-green-400 uppercase">CO2 Prevented</p>
+                <p class="text-lg font-black">${co2Saved} kg</p>
+            </div>
+            <div>
+                <p class="text-[8px] font-black text-blue-400 uppercase">Fuel Waste Cut</p>
+                <p class="text-lg font-black">${fuelSaved} L</p>
+            </div>
+        `;
+
         actionBtn.innerHTML = `ACCEPT ${selectedBundles.length} BUNDLES (${formatCurrency(totalPriceUSD)})`;
-        window.SELECTED_PRICE_USD = totalPriceUSD; // Updates the escrow amount
+        window.SELECTED_PRICE_USD = totalPriceUSD;
     } else {
+        impactCard.classList.add('hidden');
         actionBar.style.display = 'none';
     }
 }
