@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>RouteNova | Smart Rural Logistics</title>
-    
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -299,9 +299,30 @@ function updateCapacityUI() {
     }
 }
     function handlePrimaryAction() {
-        if(currentStep === 'matches') showRouteMap();
-        else if(currentStep === 'map') showVerificationQR();
+    if(currentStep === 'matches') {
+        // Trigger the Celebration!
+        confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#16a34a', '#2563eb', '#fbbf24']
+        });
+
+        // Sync Status: Mark selected shipments as 'in-transit' in the Global State
+        selectedBundles.forEach(selected => {
+            const ship = globalShipments.find(gs => gs.name === selected.name);
+            if(ship) ship.status = 'in-transit';
+        });
+
+        // Small delay so they see the confetti before the map opens
+        setTimeout(() => {
+            showRouteMap();
+        }, 1000);
+
+    } else if(currentStep === 'map') {
+        showVerificationQR();
     }
+}
 function showRouteMap() {
     currentStep = 'map';
     const content = document.getElementById('app-content');
