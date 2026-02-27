@@ -147,22 +147,79 @@
             </div>`;
     }
 
-    function findLoads() {
-        const res = document.getElementById('results');
-        res.innerHTML = `
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-green-500 cursor-pointer" onclick="document.getElementById('action-bar').style.display='block'">
+ function findLoads() {
+    const res = document.getElementById('results');
+    // We define different base prices for the new bundles
+    const price1 = 22; 
+    const price2 = 18;
+    const price3 = 35;
+
+    res.innerHTML = `
+        <div class="animate-fade-in space-y-4">
+            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 text-center">3 Loads Found on Your Route</h3>
+            
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-green-500 transition-all cursor-pointer" onclick="selectBundle(this, ${price1})">
                 <div class="flex justify-between items-start">
                     <div>
-                        <h3 class="font-black text-slate-800 text-lg italic">Agri-Bundle #402</h3>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="bg-green-100 text-green-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">Verified</span>
+                            <h3 class="font-black text-slate-800 text-lg italic">Agri-Bundle #402</h3>
+                        </div>
                         <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 4x Rice Sacks (120kg)</p>
                     </div>
                     <div class="text-right">
-                        <p class="text-2xl font-black text-green-600">${formatCurrency(BUNDLE_VALUE_USD)}</p>
+                        <p class="text-2xl font-black text-green-600">${formatCurrency(price1)}</p>
+                        <p class="text-[8px] text-slate-300 font-bold uppercase">Escrow Ready</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-green-500 transition-all cursor-pointer" onclick="selectBundle(this, ${price2})">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="bg-blue-100 text-blue-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">Priority</span>
+                            <h3 class="font-black text-slate-800 text-lg italic">Seed Batch #109</h3>
+                        </div>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 2x Seed Crates (45kg)</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-black text-green-600">${formatCurrency(price2)}</p>
+                        <p class="text-[8px] text-slate-300 font-bold uppercase text-nowrap">Instant Pay</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent hover:border-green-500 transition-all cursor-pointer" onclick="selectBundle(this, ${price3})">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="bg-orange-100 text-orange-600 text-[8px] font-black px-2 py-0.5 rounded uppercase">Heavy Load</span>
+                            <h3 class="font-black text-slate-800 text-lg italic">Bio-Fertilizer #88</h3>
+                        </div>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 10x Compost Bags (250kg)</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-black text-green-600">${formatCurrency(price3)}</p>
                         <p class="text-[8px] text-slate-300 font-bold uppercase text-nowrap">Escrow Ready</p>
                     </div>
                 </div>
-            </div>`;
-    }
+            </div>
+        </div>
+    `;
+}
+
+// Add this helper to update the global price when a bundle is selected
+function selectBundle(element, price) {
+    // Visual feedback for selection
+    const allBundles = document.querySelectorAll('.cursor-pointer');
+    allBundles.forEach(b => b.style.borderColor = 'transparent');
+    element.style.borderColor = '#16a34a';
+
+    // Update the escrow value globally for the rest of the flow
+    window.SELECTED_PRICE_USD = price; 
+    document.getElementById('action-bar').style.display = 'block';
+}
 
     function handlePrimaryAction() {
         if(currentStep === 'matches') showRouteMap();
