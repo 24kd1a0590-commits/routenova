@@ -53,7 +53,10 @@
     // --- 1. GLOBAL STATE & LOCALIZATION ---
     const USD_TO_INR = 83.50; 
     const BUNDLE_VALUE_USD = 22; 
-    
+    let selectedBundles = []; // Track multiple selections
+let totalWeight = 0;
+let totalPriceUSD = 0;
+const MAX_CAP = 500; // Truck Limit
     let escrowBalance = 0;
     let currentRole = null; 
     let currentStep = 'matches'; 
@@ -194,38 +197,55 @@
 }
 // Add this helper to update the global price when a bundle is selected
 function selectBundle(element, price, weight, name) {
-    // 1. Visual Selection: Highlight the card
-    const allCards = document.querySelectorAll('.bundle-card');
-    allCards.forEach(card => {
-        card.classList.remove('border-green-500', 'bg-green-50/30');
-        card.classList.add('border-transparent');
-    });
-    element.classList.remove('border-transparent');
-    element.classList.add('border-green-500', 'bg-green-50/30');
+    // Check if it's already selected
+    const index = selectedBundles.findIndex(b => b.name === name);
 
-    // 2. Capacity Math
-    const MAX_CAP = 500; // Truck max capacity in kg
-    const percentage = (weight / MAX_CAP) * 100;
-    
-    // 3. Update Capacity Bar UI
-    const bar = document.getElementById('cap-bar');
-    const text = document.getElementById('cap-text');
-    bar.style.width = percentage + '%';
-    text.innerText = Math.round(percentage) + '% Full';
-    
-    // Change bar color if it gets too full
-    if(percentage > 80) bar.className = "bg-orange-500 h-full transition-all duration-500";
-    else bar.className = "bg-green-500 h-full transition-all duration-500";
+    if (index > -1) {
+        // DESELECT: If already in list, remove it
+        selectedBundles.splice(index, 1);
+        element.classList.remove('border-green-500', 'bg-green-50/30');
+        element.classList.add('border-transparent');
+    } else {
+        // SELECT: Check if weight exceeds capacity
+        if (totalWeight + weight > MAX_CAP) {
+            alert("⚠️ TRUCK OVERLOAD: This bundle is too heavy for your remaining capacity!");
+            return;
+        }
+        
+        selectedBundles.push({ name, price, weight });
+        element.classList.remove('border-transparent');
+        element.classList.add('border-green-500', 'bg-green-50/30');
+    }
 
-    // 4. Update Global State for Payment/Escrow
-    window.SELECTED_PRICE_USD = price; 
-    
-    // 5. Update the "Accept" Button text
-    const actionBtn = document.getElementById('primary-btn');
-    document.getElementById('action-bar').style.display = 'block';
-    actionBtn.innerHTML = `ACCEPT ${name.toUpperCase()} (${formatCurrency(price)})`;
+    // Recalculate totals
+    totalWeight = selectedBundles.reduce((sum, b) => sum + b.weight, 0);
+    totalPriceUSD = selectedBundles.reduce((sum, b) => sum + b.price, 0);
+
+    // Update UI
+    updateCapacityUI();
 }
 
+function updateCapacityUI() {
+    const percentage = (totalWeight / MAX_CAP) * 100;
+    const bar = document.getElementById('cap-bar');
+    const text = document.getElementById('cap-text');
+    const actionBtn = document.getElementById('primary-btn');
+    const actionBar = document.getElementById('action-bar');
+
+    bar.style.width = percentage + '%';
+    text.innerText = `${totalWeight}kg / ${MAX_CAP}kg (${Math.round(percentage)}%)`;
+
+    // Visual warning for heavy loads
+    bar.className = percentage > 85 ? "bg-orange-500 h-full transition-all" : "bg-green-500 h-full transition-all";
+
+    if (selectedBundles.length > 0) {
+        actionBar.style.display = 'block';
+        actionBtn.innerHTML = `ACCEPT ${selectedBundles.length} BUNDLES (${formatCurrency(totalPriceUSD)})`;
+        window.SELECTED_PRICE_USD = totalPriceUSD; // Updates the escrow amount
+    } else {
+        actionBar.style.display = 'none';
+    }
+}
     function handlePrimaryAction() {
         if(currentStep === 'matches') showRouteMap();
         else if(currentStep === 'map') showVerificationQR();
