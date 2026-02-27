@@ -111,59 +111,7 @@ const MOCK_LOADS = [
     { id: 3, name: "Organic Fertilizer", pickup: "Agri Depot", lat: 12.9900, lng: 77.6200, pay: 12, weight: "25kg" }
 ];
 
-function findLoadsOnRoute() {
-    const dest = document.getElementById('destination-input').value;
-    const results = document.getElementById('results-container');
-    const actionBar = document.getElementById('action-bar');
-    
-    results.innerHTML = `
-        <div class="flex flex-col items-center mt-10">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-            <p class="text-xs text-slate-400 mt-2 font-bold uppercase italic">Analyzing Corridor to ${dest}...</p>
-        </div>`;
 
-    setTimeout(() => {
-        results.innerHTML = `<h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest px-2">Optimized Matches</h3>`;
-        
-        MOCK_LOADS.forEach(load => {
-            // Logic: Simulate "Deviation" (In a real app, this uses OSRM or Google Matrix API)
-            const extraDist = (Math.random() * 2.5).toFixed(1); // Simulated km deviation
-            const extraTime = Math.floor(extraDist * 4); // Simulated minutes (4 mins per km)
-            
-            results.innerHTML += `
-                <div class="bg-white p-5 rounded-3xl border-2 border-slate-50 shadow-sm hover:border-green-200 transition-all mb-4 relative overflow-hidden group">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <div class="flex items-center gap-2">
-                                <h3 class="font-black text-slate-800 text-lg">${load.name}</h3>
-                                <span class="bg-slate-100 text-slate-500 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">${load.weight}</span>
-                            </div>
-                            <p class="text-[11px] text-slate-400 font-medium mt-1">📍 Pickup: ${load.pickup}</p>
-                            
-                            <div class="mt-3 flex gap-3">
-                                <div class="flex items-center gap-1">
-                                    <span class="text-orange-500 text-xs">🕒</span>
-                                    <span class="text-[10px] font-bold text-slate-600">+${extraTime} mins deviation</span>
-                                </div>
-                                <div class="flex items-center gap-1">
-                                    <span class="text-blue-500 text-xs">🛣️</span>
-                                    <span class="text-[10px] font-bold text-slate-600">+${extraDist} km total</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-2xl font-black text-green-600 leading-none">$${load.pay}</span>
-                            <p class="text-[9px] text-green-700 font-bold uppercase mt-1 bg-green-50 px-2 py-1 rounded-lg">Pure Profit</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
-        actionBar.style.display = "block";
-        document.getElementById('primary-btn').innerText = `ACCEPT ALL BUNDLES & START RETURN`;
-    }, 1500);
-}
 function renderShipperForm() {
     const content = document.getElementById('app-content');
     content.innerHTML = `
@@ -234,33 +182,110 @@ function renderShipperForm() {
                 showVerificationQR();
             }
         }
+let selectedBundles = [];
 
-        function showRouteMap() {
-            currentStep = 'map';
-            const content = document.getElementById('app-content');
-            content.innerHTML = `
-                <h2 class="text-lg font-bold mb-4">Route to Pickup</h2>
-                <div id="map" class="shadow-xl"></div>
-                <div class="mt-6 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-                    <div class="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">12m</div>
-                    <div>
-                        <p class="text-xs font-bold text-slate-400">NEXT STOP</p>
-                        <p class="font-black">City Market Gate 4</p>
+function findLoadsOnRoute() {
+    const dest = document.getElementById('destination-input').value;
+    const results = document.getElementById('results-container');
+    const actionBar = document.getElementById('action-bar');
+    selectedBundles = []; // Reset selections
+    
+    results.innerHTML = `<div class="flex flex-col items-center mt-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div></div>`;
+
+    setTimeout(() => {
+        results.innerHTML = `<h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-widest px-2">Available for Micropooling</h3>`;
+        
+        MOCK_LOADS.forEach(load => {
+            const extraDist = (Math.random() * 2.5).toFixed(1);
+            results.innerHTML += `
+                <div id="load-${load.id}" onclick="toggleBundle(${load.id}, ${load.pay})" class="bg-white p-5 rounded-3xl border-2 border-slate-50 shadow-sm cursor-pointer transition-all mb-4 relative overflow-hidden">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h3 class="font-black text-slate-800 text-lg">${load.name}</h3>
+                            <p class="text-[11px] text-slate-400 font-medium">📍 ${load.pickup}</p>
+                            <p class="text-[10px] text-orange-500 font-bold mt-2">+${extraDist} km deviation</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-2xl font-black text-green-600">$${load.pay}</span>
+                            <div class="select-indicator mt-2 h-6 w-6 border-2 border-slate-200 rounded-full ml-auto"></div>
+                        </div>
                     </div>
                 </div>
             `;
-            
-            // Map logic
-            setTimeout(() => {
-                map = L.map('map').setView([12.9716, 77.5946], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                L.marker([12.9716, 77.5946]).addTo(map).bindPopup('You');
-                L.marker([12.9850, 77.6050]).addTo(map).bindPopup('Pickup');
-                L.polyline([[12.9716, 77.5946], [12.9850, 77.6050]], {color: '#16a34a', weight: 6}).addTo(map);
-            }, 100);
+        });
+        actionBar.style.display = "block";
+        updatePrimaryButton();
+    }, 800);
+}
 
-            document.getElementById('primary-btn').innerText = "I HAVE ARRIVED AT PICKUP";
-        }
+function toggleBundle(id, pay) {
+    const element = document.getElementById(`load-${id}`);
+    const index = selectedBundles.indexOf(id);
+    
+    if (index > -1) {
+        selectedBundles.splice(index, 1);
+        element.classList.remove('border-green-500', 'bg-green-50');
+    } else {
+        selectedBundles.push(id);
+        element.classList.add('border-green-500', 'bg-green-50');
+    }
+    updatePrimaryButton();
+}
+
+function updatePrimaryButton() {
+    const btn = document.getElementById('primary-btn');
+    if (selectedBundles.length === 0) {
+        btn.innerText = "SELECT BUNDLES";
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+    } else {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        const total = selectedBundles.length * 12; // Simple math for demo
+        btn.innerText = `ACCEPT ${selectedBundles.length} BUNDLES ($${total})`;
+    }
+}
+
+// Optimized Map Logic for Micropooling
+function showRouteMap() {
+    currentStep = 'map';
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+        <h2 class="text-lg font-bold mb-4">Optimized Collection Route</h2>
+        <div id="map" class="shadow-xl"></div>
+        <div class="mt-4 grid grid-cols-2 gap-3">
+            <div class="bg-white p-4 rounded-2xl border border-slate-100">
+                <p class="text-[10px] text-slate-400 font-bold uppercase">Total Distance</p>
+                <p class="text-lg font-black italic">14.2 km</p>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-100">
+                <p class="text-[10px] text-slate-400 font-bold uppercase">Time Efficiency</p>
+                <p class="text-lg font-black text-green-600 italic">+88%</p>
+            </div>
+        </div>
+    `;
+    
+    setTimeout(() => {
+        map = L.map('map').setView([12.9716, 77.5946], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        // SHOWING MULTIPLE STOPS (Route Optimization Visual)
+        const stops = [
+            [12.9716, 77.5946], // Current
+            [12.9850, 77.6050], // Pickup 1
+            [12.9900, 77.6200], // Pickup 2
+            [13.0500, 77.7500]  // Home
+        ];
+        
+        stops.forEach((stop, i) => {
+            L.marker(stop).addTo(map).bindPopup(i === 0 ? "You" : i === 3 ? "Home" : "Pickup " + i);
+        });
+
+        L.polyline(stops, {color: '#16a34a', weight: 5, dashArray: '10, 10'}).addTo(map);
+    }, 100);
+
+    document.getElementById('primary-btn').innerText = "ARRIVED AT FINAL PICKUP";
+}
 
         function showVerificationQR() {
             currentStep = 'qrcode';
