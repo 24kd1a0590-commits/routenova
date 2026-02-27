@@ -225,26 +225,82 @@
         L.polyline([[12.9716, 77.5946], [12.8500, 77.6500]], {color: '#16a34a', weight: 6}).addTo(map);
     }
 
-    function previewPickup(input) {
-        if (input.files && input.files[0]) {
-            escrowBalance = BUNDLE_VALUE;
-            alert(`🛡️ SMART ESCROW SECURED: $${escrowBalance}.00 locked for driver.`);
-        }
-    }
+   // --- UPDATED FLOW: STEP 2 (DELIVERY VERIFICATION) ---
 
-    function showVerificationQR() {
-        currentStep = 'qrcode';
-        const content = document.getElementById('app-content');
-        content.innerHTML = `
-            <div class="flex flex-col items-center pt-10 text-center animate-fade-in">
-                <div onclick="completePayment()" class="p-8 bg-white rounded-[3rem] shadow-2xl border-8 border-green-50">
+function showVerificationQR() {
+    currentStep = 'qrcode';
+    const content = document.getElementById('app-content');
+    
+    // We start with the QR hidden and the 'Unload Photo' required
+    content.innerHTML = `
+        <div class="flex flex-col items-center pt-4 animate-fade-in">
+            <h2 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 italic">Step 2: Delivery Verification</h2>
+            
+            <div id="pod-card" class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-blue-100 mb-6 w-full transition-all">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="h-8 w-8 bg-blue-50 rounded-full flex items-center justify-center text-sm">📸</div>
+                    <p class="text-sm font-black text-slate-700">Proof of Unloading</p>
+                </div>
+                
+                <div id="photo-preview-unload" class="w-full h-44 bg-slate-50 rounded-3xl mb-4 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden">
+                     <span class="text-slate-300 text-[10px] font-bold uppercase tracking-widest">Awaiting Photo...</span>
+                </div>
+
+                <input type="file" id="camera-unload" accept="image/*" capture="camera" class="hidden" onchange="previewUnload(this)">
+                
+                <button id="unload-btn" onclick="document.getElementById('camera-unload').click()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-200 uppercase text-[10px] tracking-widest transition-all active:scale-95">
+                    CAPTURE UNPACKED GOODS
+                </button>
+            </div>
+
+            <div id="qr-container" class="hidden flex flex-col items-center animate-fade-in">
+                <div class="bg-green-500 text-white text-[9px] font-black px-4 py-1.5 rounded-full mb-4 shadow-lg animate-bounce">
+                    ✅ UNLOAD VERIFIED - SHOW TO RECEIVER
+                </div>
+                <div onclick="completePayment()" class="cursor-pointer p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50">
                     <div id="qrcode"></div>
                 </div>
-                <p class="mt-8 font-black text-slate-400 uppercase tracking-tighter">Scan QR to Release Funds</p>
-            </div>`;
-        new QRCode(document.getElementById("qrcode"), { text: "RELEASE", width: 180, height: 180 });
-        document.getElementById('action-bar').style.display = "none";
+                <p class="mt-4 text-[10px] font-black text-slate-400 uppercase italic">Receiver scans to release $${escrowBalance}.00</p>
+            </div>
+        </div>
+    `;
+    
+    // Generate the QR in the background, but it stays hidden
+    new QRCode(document.getElementById("qrcode"), {
+        text: "POD_VERIFIED_RELEASE_FUNDS",
+        width: 160,
+        height: 160,
+        colorDark : "#0f172a",
+        colorLight : "#ffffff"
+    });
+    
+    document.getElementById('action-bar').style.display = "none";
+}
+
+// Logic to handle the Unload Photo
+function previewUnload(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Show the photo
+            const container = document.getElementById('photo-preview-unload');
+            container.innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover animate-fade-in">`;
+            
+            // UI Transition: Dim the photo card and show the QR
+            document.getElementById('pod-card').style.opacity = "0.5";
+            document.getElementById('unload-btn').innerText = "PHOTO UPLOADED ✅";
+            document.getElementById('unload-btn').disabled = true;
+            
+            // Show the QR Code for the receiver
+            document.getElementById('qr-container').classList.remove('hidden');
+            
+            // Add to offline sync queue (for rural reliability)
+            console.log("PoD Saved: Proof of delivery stored for Shipper audit.");
+        };
+        reader.readAsDataURL(input.files[0]);
     }
+}
+    
 
     function completePayment() {
         document.getElementById('app-content').innerHTML = `
