@@ -11,6 +11,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
+        @keyframes progress {
+    0% { width: 0%; }
+    100% { width: 100%; }
+}
+.animate-progress-fill {
+    animation: progress 3s ease-in-out forwards;
+}
         #map { height: 300px; width: 100%; border-radius: 1.5rem; }
         .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
         .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
@@ -56,8 +63,8 @@ function renderProfileSetup() {
     content.innerHTML = `
         <div class="animate-fade-in p-2">
             <div class="mb-8">
-                <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">Welcome to RouteNova</h2>
-                <p class="text-slate-400 text-sm font-medium">Please select your primary role to continue.</p>
+                <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">Join RouteNova</h2>
+                <p class="text-slate-400 text-sm font-medium">Select your role to start.</p>
             </div>
 
             <div class="grid grid-cols-1 gap-4 mb-8">
@@ -65,9 +72,9 @@ function renderProfileSetup() {
                     <div class="flex justify-between items-center">
                         <div>
                             <h3 class="font-black text-xl text-slate-800">I am a Driver</h3>
-                            <p class="text-xs text-slate-400">I have a vehicle and want to earn on return trips.</p>
+                            <p class="text-[10px] text-slate-400 uppercase font-bold mt-1 tracking-tight">Earn on return trips</p>
                         </div>
-                        <span class="text-3xl group-hover:scale-110 transition-transform">🚚</span>
+                        <span class="text-3xl">🚚</span>
                     </div>
                 </div>
 
@@ -75,50 +82,45 @@ function renderProfileSetup() {
                     <div class="flex justify-between items-center">
                         <div>
                             <h3 class="font-black text-xl text-slate-800">I am a Shipper</h3>
-                            <p class="text-xs text-slate-400">I have goods that need to reach rural areas.</p>
+                            <p class="text-[10px] text-slate-400 uppercase font-bold mt-1 tracking-tight">Send goods rurally</p>
                         </div>
-                        <span class="text-3xl group-hover:scale-110 transition-transform">📦</span>
+                        <span class="text-3xl">📦</span>
                     </div>
                 </div>
             </div>
 
-            <div id="role-form" class="hidden animate-fade-in space-y-5">
-                <div class="h-px bg-slate-100 w-full my-6"></div>
+            <div id="role-form" class="hidden animate-fade-in space-y-5 px-1">
+                <div class="h-px bg-slate-200 w-full my-6"></div>
                 
                 <div>
                     <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Full Name</label>
-                    <input type="text" id="u-name" placeholder="John Doe" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 focus:border-slate-900 outline-none font-bold">
+                    <input type="text" id="u-name" placeholder="Enter Full Name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 focus:border-slate-900 outline-none font-bold">
                 </div>
 
                 <div id="driver-fields" class="hidden space-y-5">
                     <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Vehicle</label>
-                            <select id="u-vehicle" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
-                                <option>Pickup Truck</option>
-                                <option>Three-Wheeler</option>
-                                <option>Mini Van</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Capacity (kg)</label>
-                            <input type="number" id="u-capacity" placeholder="500" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                        <input type="text" id="u-vehicle" placeholder="Vehicle Type" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none text-sm">
+                        <input type="number" id="u-capacity" placeholder="Cap (kg)" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none text-sm">
+                    </div>
+                    
+                    <div class="p-5 bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3 text-center">Required: Driving License</label>
+                        <div class="flex items-center gap-4">
+                            <div id="license-preview" class="h-14 w-20 bg-slate-50 rounded-xl border-2 flex items-center justify-center text-2xl">🪪</div>
+                            <input type="file" id="u-license" accept="image/*" class="hidden" onchange="document.getElementById('license-preview').innerHTML='✅'">
+                            <button onclick="document.getElementById('u-license').click()" class="flex-1 bg-slate-900 text-white py-4 rounded-xl text-[10px] font-black uppercase tracking-widest">Upload License</button>
                         </div>
                     </div>
                 </div>
 
                 <div id="shipper-fields" class="hidden">
-                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Business/Farm Name</label>
-                    <input type="text" id="u-business" placeholder="Green Valley Farms" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                    <input type="text" id="u-business" placeholder="Business/Farm Name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none">
                 </div>
 
-                <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Verified Phone</label>
-                    <input type="tel" id="u-phone" placeholder="+91 XXXX XXXX" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
-                </div>
+                <input type="tel" id="u-phone" placeholder="Phone Number" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none">
 
-                <button onclick="saveFinalProfile()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-xl hover:bg-slate-800 transition-all mt-4">
-                    ENTER ROUTENOVA
+                <button onclick="saveFinalProfile()" class="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] shadow-xl transition-all mt-4 transform active:scale-95">
+                    AUTHENTICATE & START
                 </button>
             </div>
         </div>
@@ -147,24 +149,53 @@ function selectRole(role) {
         dFields.classList.add('hidden');
     }
 }
-
 function saveFinalProfile() {
-    userProfile.name = document.getElementById('u-name').value;
-    userProfile.phone = document.getElementById('u-phone').value;
-    
-    if(!userProfile.name || !userProfile.phone) {
-        alert("Please complete your profile to secure your account.");
+    const name = document.getElementById('u-name').value;
+    const phone = document.getElementById('u-phone').value;
+
+    if(!name || !phone) {
+        alert("Security Error: Please fill all fields.");
         return;
     }
 
     if(userProfile.role === 'driver') {
-        userProfile.details.vehicle = document.getElementById('u-vehicle').value;
-        userProfile.details.capacity = document.getElementById('u-capacity').value;
-        switchView('driver');
+        const licenseInput = document.getElementById('u-license');
+        // CHECK IF LICENSE IS UPLOADED
+        if(!licenseInput.files || licenseInput.files.length === 0) {
+            alert("Verification Failed: Driving License image is mandatory for drivers.");
+            return;
+        }
+        simulateAuthentication();
     } else {
-        userProfile.details.business = document.getElementById('u-business').value;
+        // Shippers skip license auth for now
         switchView('shipper');
     }
+}
+
+function simulateAuthentication() {
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+        <div class="flex flex-col items-center justify-center min-h-[500px] text-center p-8 animate-fade-in">
+            <div class="relative w-28 h-28 mb-10">
+                <div class="absolute inset-0 border-8 border-slate-100 rounded-full"></div>
+                <div class="absolute inset-0 border-8 border-green-600 rounded-full border-t-transparent animate-spin"></div>
+                <div class="absolute inset-0 flex items-center justify-center text-4xl">🛡️</div>
+            </div>
+            <h2 class="text-2xl font-black text-slate-900 tracking-tight italic">Verifying Identity</h2>
+            <p class="text-slate-400 text-[10px] mt-3 uppercase font-bold tracking-[0.2em] leading-relaxed px-6">
+                Analyzing document and cross-referencing with National Transport Database...
+            </p>
+            
+            <div class="mt-12 w-full max-w-[220px] bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
+                <div class="bg-green-600 h-full animate-progress-fill"></div>
+            </div>
+        </div>
+    `;
+
+    // Delay entry into the app to simulate "AI processing"
+    setTimeout(() => { 
+        switchView('driver'); 
+    }, 3500);
 }
 
         function switchView(role) {
