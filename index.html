@@ -47,6 +47,125 @@
         let currentRole = 'driver';
         let currentStep = 'matches'; // matches -> map -> qrcode
         let map = null;
+        let userProfile = { role: null, name: null, phone: null, details: {} };
+
+function renderProfileSetup() {
+    const content = document.getElementById('app-content');
+    document.getElementById('action-bar').style.display = "none";
+
+    content.innerHTML = `
+        <div class="animate-fade-in p-2">
+            <div class="mb-8">
+                <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">Welcome to RouteNova</h2>
+                <p class="text-slate-400 text-sm font-medium">Please select your primary role to continue.</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 mb-8">
+                <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all hover:border-green-500 group">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-black text-xl text-slate-800">I am a Driver</h3>
+                            <p class="text-xs text-slate-400">I have a vehicle and want to earn on return trips.</p>
+                        </div>
+                        <span class="text-3xl group-hover:scale-110 transition-transform">🚚</span>
+                    </div>
+                </div>
+
+                <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all hover:border-blue-500 group">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-black text-xl text-slate-800">I am a Shipper</h3>
+                            <p class="text-xs text-slate-400">I have goods that need to reach rural areas.</p>
+                        </div>
+                        <span class="text-3xl group-hover:scale-110 transition-transform">📦</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="role-form" class="hidden animate-fade-in space-y-5">
+                <div class="h-px bg-slate-100 w-full my-6"></div>
+                
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Full Name</label>
+                    <input type="text" id="u-name" placeholder="John Doe" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 focus:border-slate-900 outline-none font-bold">
+                </div>
+
+                <div id="driver-fields" class="hidden space-y-5">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Vehicle</label>
+                            <select id="u-vehicle" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                                <option>Pickup Truck</option>
+                                <option>Three-Wheeler</option>
+                                <option>Mini Van</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Capacity (kg)</label>
+                            <input type="number" id="u-capacity" placeholder="500" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="shipper-fields" class="hidden">
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Business/Farm Name</label>
+                    <input type="text" id="u-business" placeholder="Green Valley Farms" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Verified Phone</label>
+                    <input type="tel" id="u-phone" placeholder="+91 XXXX XXXX" class="w-full p-4 bg-white rounded-2xl border-2 border-slate-100 font-bold outline-none">
+                </div>
+
+                <button onclick="saveFinalProfile()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-xl hover:bg-slate-800 transition-all mt-4">
+                    ENTER ROUTENOVA
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function selectRole(role) {
+    userProfile.role = role;
+    document.getElementById('role-form').classList.remove('hidden');
+    
+    // UI Highlight
+    const dCard = document.getElementById('role-driver');
+    const sCard = document.getElementById('role-shipper');
+    const dFields = document.getElementById('driver-fields');
+    const sFields = document.getElementById('shipper-fields');
+
+    if(role === 'driver') {
+        dCard.classList.add('border-green-500', 'bg-green-50');
+        sCard.classList.remove('border-blue-500', 'bg-blue-50');
+        dFields.classList.remove('hidden');
+        sFields.classList.add('hidden');
+    } else {
+        sCard.classList.add('border-blue-500', 'bg-blue-50');
+        dCard.classList.remove('border-green-500', 'bg-green-50');
+        sFields.classList.remove('hidden');
+        dFields.classList.add('hidden');
+    }
+}
+
+function saveFinalProfile() {
+    userProfile.name = document.getElementById('u-name').value;
+    userProfile.phone = document.getElementById('u-phone').value;
+    
+    if(!userProfile.name || !userProfile.phone) {
+        alert("Please complete your profile to secure your account.");
+        return;
+    }
+
+    if(userProfile.role === 'driver') {
+        userProfile.details.vehicle = document.getElementById('u-vehicle').value;
+        userProfile.details.capacity = document.getElementById('u-capacity').value;
+        switchView('driver');
+    } else {
+        userProfile.details.business = document.getElementById('u-business').value;
+        switchView('shipper');
+    }
+}
 
         function switchView(role) {
             currentRole = role;
