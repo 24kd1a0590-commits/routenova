@@ -291,12 +291,7 @@ function updateCapacityUI() {
         document.getElementById('action-bar').style.display = 'none';
         if(statsDiv) statsDiv.remove();
     }
-    // Show and update graph
-const graphContainer = document.getElementById('impact-graph');
-graphContainer.classList.remove('hidden');
-document.getElementById('graph-co2').style.height = (selectedBundles.length * 30) + '%';
-document.getElementById('graph-fuel').style.height = (selectedBundles.length * 25) + '%';
-document.getElementById('graph-profit').style.height = (percentage) + '%';
+    
 }
 function handlePrimaryAction() {
         if(currentStep === 'matches') showRouteMap();
