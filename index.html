@@ -49,99 +49,127 @@
             </button>
         </div>
     </div>
-
-   <script>
+<script>
     // --- GLOBAL STATE ---
     let escrowBalance = 0;
     let driverEarnings = 0;
     const BUNDLE_VALUE = 22; 
-    let currentRole = null; // Set during signup
+    let currentRole = null; 
     let currentStep = 'matches'; 
-    let userProfile = { name: null, role: null };
-    let routingControl = null;
+    let userProfile = { name: null, role: null, phone: null, vehicle: null, capacity: null };
     let map = null;
 
-    // --- 1. SIGNUP & ROLE SELECTION ---
+    // --- 1. DYNAMIC PROFILE CREATION ---
     function renderProfileSetup() {
         const content = document.getElementById('app-content');
         document.getElementById('action-bar').style.display = "none";
-        // Hide tabs during signup
-        document.querySelector('.flex.p-2.bg-slate-100').style.display = "none";
+        document.querySelector('.flex.p-2.bg-slate-100').style.display = "none"; // Hide tabs
 
         content.innerHTML = `
             <div class="animate-fade-in p-2">
                 <div class="mb-8">
-                    <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">Join RouteNova</h2>
-                    <p class="text-slate-400 text-sm">Select your identity to continue.</p>
+                    <h2 class="text-3xl font-black text-slate-900 tracking-tighter italic">RouteNova Setup</h2>
+                    <p class="text-slate-400 text-sm">Choose your account type to verify.</p>
                 </div>
 
-                <div class="grid grid-cols-1 gap-4 mb-8">
-                    <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                <div class="grid grid-cols-1 gap-4 mb-6">
+                    <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all hover:border-green-500">
                         <div class="flex justify-between items-center">
-                            <div>
-                                <h3 class="font-black text-xl">I am a Driver</h3>
-                                <p class="text-[10px] text-slate-400 uppercase font-bold">Earn on return trips</p>
-                            </div>
+                            <div><h3 class="font-black text-xl">Driver</h3><p class="text-[10px] text-slate-400 font-bold">Earn from empty space</p></div>
                             <span class="text-3xl">🚚</span>
                         </div>
                     </div>
-
-                    <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                    <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all hover:border-blue-500">
                         <div class="flex justify-between items-center">
-                            <div>
-                                <h3 class="font-black text-xl">I am a Shipper</h3>
-                                <p class="text-[10px] text-slate-400 uppercase font-bold">Send goods rurally</p>
-                            </div>
+                            <div><h3 class="font-black text-xl">Shipper</h3><p class="text-[10px] text-slate-400 font-bold">Secure rural delivery</p></div>
                             <span class="text-3xl">📦</span>
                         </div>
                     </div>
                 </div>
 
-                <div id="role-form" class="hidden space-y-4">
-                    <input type="text" id="u-name" placeholder="Full Name" class="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 font-bold outline-none">
-                    <button onclick="finalizeAuth()" class="w-full bg-green-600 text-white font-black py-5 rounded-[2rem] shadow-xl">START SYSTEM</button>
+                <div id="registration-form" class="hidden space-y-4 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200">
+                    <div class="space-y-3">
+                        <input type="text" id="reg-name" placeholder="Full Name" class="w-full p-4 rounded-2xl border-none font-bold outline-none shadow-sm">
+                        <input type="tel" id="reg-phone" placeholder="Phone Number" class="w-full p-4 rounded-2xl border-none font-bold outline-none shadow-sm">
+                        
+                        <div id="driver-only" class="hidden space-y-3">
+                            <div class="flex gap-2">
+                                <input type="text" id="reg-vehicle" placeholder="Vehicle (e.g. Pickup)" class="w-1/2 p-4 rounded-2xl border-none font-bold outline-none shadow-sm text-sm">
+                                <input type="text" id="reg-cap" placeholder="Cap (kg)" class="w-1/2 p-4 rounded-2xl border-none font-bold outline-none shadow-sm text-sm">
+                            </div>
+                            <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-green-200 text-center">
+                                <p class="text-[9px] font-black text-green-600 uppercase mb-2">Required: Driving License</p>
+                                <input type="file" id="driver-id" class="hidden" onchange="updateFileLabel('driver-id-label')">
+                                <button onclick="document.getElementById('driver-id').click()" id="driver-id-label" class="text-[10px] font-bold bg-slate-100 px-4 py-2 rounded-lg">Upload Photo</button>
+                            </div>
+                        </div>
+
+                        <div id="shipper-only" class="hidden space-y-3">
+                            <input type="text" id="reg-prof" placeholder="Business / Profession" class="w-full p-4 rounded-2xl border-none font-bold outline-none shadow-sm">
+                            <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-blue-200 text-center">
+                                <p class="text-[9px] font-black text-blue-600 uppercase mb-2">Required: Aadhar / Gov ID</p>
+                                <input type="file" id="shipper-id" class="hidden" onchange="updateFileLabel('shipper-id-label')">
+                                <button onclick="document.getElementById('shipper-id').click()" id="shipper-id-label" class="text-[10px] font-bold bg-slate-100 px-4 py-2 rounded-lg">Upload Proof</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="startVerification()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-xl mt-4">VERIFY IDENTITY</button>
                 </div>
             </div>
         `;
     }
 
     function selectRole(role) {
-        userProfile.role = role;
-        document.getElementById('role-form').classList.remove('hidden');
-        document.getElementById('role-driver').className = role === 'driver' ? 'p-6 bg-green-50 border-2 border-green-500 rounded-[2.5rem]' : 'p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] opacity-50';
-        document.getElementById('role-shipper').className = role === 'shipper' ? 'p-6 bg-blue-50 border-2 border-blue-500 rounded-[2.5rem]' : 'p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] opacity-50';
+        currentRole = role;
+        document.getElementById('registration-form').classList.remove('hidden');
+        document.getElementById('driver-only').classList.toggle('hidden', role !== 'driver');
+        document.getElementById('shipper-only').classList.toggle('hidden', role !== 'shipper');
+        
+        // Highlight active card
+        document.getElementById('role-driver').style.borderColor = role === 'driver' ? '#16a34a' : '#f1f5f9';
+        document.getElementById('role-shipper').style.borderColor = role === 'shipper' ? '#2563eb' : '#f1f5f9';
     }
 
-    function finalizeAuth() {
-        const name = document.getElementById('u-name').value;
-        if(!name) return alert("Please enter your name");
-        userProfile.name = name;
-        
-        // Show tabs now that role is fixed
-        document.querySelector('.flex.p-2.bg-slate-100').style.display = "flex";
-        
-        if(userProfile.role === 'driver') {
-            switchView('driver');
-        } else {
-            switchView('shipper');
-        }
+    function updateFileLabel(id) {
+        document.getElementById(id).innerText = "File Attached ✅";
+        document.getElementById(id).classList.add('text-green-600');
     }
 
-    // --- 2. THE NAVIGATION LOGIC ---
+    // --- 2. AI VERIFICATION ANIMATION ---
+    function startVerification() {
+        const name = document.getElementById('reg-name').value;
+        if(!name) return alert("Fill out the profile!");
+
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="flex flex-col items-center justify-center min-h-[500px] text-center p-8">
+                <div class="relative w-24 h-24 mb-10">
+                    <div class="absolute inset-0 border-8 border-slate-100 rounded-full"></div>
+                    <div class="absolute inset-0 border-8 border-${currentRole === 'driver' ? 'green' : 'blue'}-600 rounded-full border-t-transparent animate-spin"></div>
+                </div>
+                <h2 class="text-2xl font-black italic uppercase">AI Verifying...</h2>
+                <p class="text-[10px] text-slate-400 font-bold mt-4 tracking-widest px-10">Cross-referencing National Database & ID Authentication</p>
+                <div class="mt-10 w-48 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                    <div class="bg-${currentRole === 'driver' ? 'green' : 'blue'}-600 h-full animate-progress-fill"></div>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            userProfile.role = currentRole;
+            document.querySelector('.flex.p-2.bg-slate-100').style.display = "flex";
+            switchView(currentRole);
+        }, 3500);
+    }
+
+    // --- 3. SYSTEM NAVIGATION ---
     function switchView(role) {
-        // LOCK: If they chose driver at start, they cannot see shipper view and vice versa
         if(userProfile.role && role !== userProfile.role) {
-            alert(`Access Denied: You are registered as a ${userProfile.role.toUpperCase()}`);
+            alert(`You are a verified ${userProfile.role}. Access Denied.`);
             return;
         }
-
         currentRole = role;
-        const btn = document.getElementById('primary-btn');
-        if (role === 'driver') {
-            renderDriverMatches();
-        } else {
-            renderShipperForm();
-        }
+        role === 'driver' ? renderDriverMatches() : renderShipperForm();
     }
 
     function renderDriverMatches() {
@@ -149,31 +177,23 @@
         content.innerHTML = `
             <div class="animate-fade-in">
                 <div class="bg-green-600 p-6 rounded-[2rem] text-white mb-6">
-                    <p class="text-[10px] font-bold opacity-70 uppercase mb-2">Your Destination</p>
+                    <p class="text-[10px] font-bold opacity-70 uppercase mb-2">Set Destination</p>
                     <input type="text" id="dest" value="Green Valley Village" class="w-full p-4 rounded-2xl text-slate-900 font-bold outline-none mb-3">
-                    <button onclick="findLoads()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs">FIND MATCHES</button>
+                    <button onclick="findLoads()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs">FIND LOADS ON ROUTE</button>
                 </div>
                 <div id="results"></div>
-            </div>
-        `;
+            </div>`;
         document.getElementById('action-bar').style.display = "none";
     }
 
     function findLoads() {
-        const res = document.getElementById('results');
-        res.innerHTML = `
-            <div class="p-4 bg-white rounded-3xl border-2 border-green-500 mb-4" onclick="toggleLoad()">
-                <div class="flex justify-between items-center">
-                    <div><h3 class="font-black">Agri-Bundle #402</h3><p class="text-[10px] text-slate-400">Pickup: Nearby Hub</p></div>
+        document.getElementById('results').innerHTML = `
+            <div class="p-4 bg-white rounded-3xl border-2 border-green-500 mb-4" onclick="document.getElementById('action-bar').style.display='block'">
+                <div class="flex justify-between">
+                    <div><h3 class="font-black">4x Rice Sacks</h3><p class="text-[10px] text-slate-400">Hub 4 📍</p></div>
                     <p class="text-xl font-black text-green-600">$22</p>
                 </div>
-                <div id="check-box" class="mt-2 text-right text-xs font-bold text-slate-300 italic">Tap to select</div>
             </div>`;
-    }
-
-    function toggleLoad() {
-        document.getElementById('check-box').innerText = "SELECTED ✅";
-        document.getElementById('action-bar').style.display = "block";
     }
 
     function handlePrimaryAction() {
@@ -181,108 +201,71 @@
         else if(currentStep === 'map') showVerificationQR();
     }
 
-    // --- 3. GOOGLE MAPS STYLE ROUTING ---
+    // --- 4. MAPS & ESCROW FLOW ---
     function showRouteMap() {
         currentStep = 'map';
         const content = document.getElementById('app-content');
         content.innerHTML = `
             <div class="animate-fade-in">
-                <h2 class="text-xs font-black text-slate-400 uppercase text-center mb-4">Route to Destination</h2>
-                <div id="map" style="height: 400px;" class="shadow-xl mb-6"></div>
-                <div class="bg-white p-4 rounded-2xl border flex items-center justify-between mb-4">
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase">Est. Trip Time</p>
-                        <p class="font-black">24 Mins (Traffic Light)</p>
-                    </div>
-                    <button onclick="document.getElementById('cam-1').click()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-[10px] font-bold">PICKUP CAPTURE</button>
-                    <input type="file" id="cam-1" capture="camera" class="hidden" onchange="previewImage(this, 'photo-preview-pickup')">
+                <div id="map" style="height: 350px;" class="rounded-[2rem] mb-6 shadow-xl border-4 border-white"></div>
+                <div class="bg-slate-900 text-white p-6 rounded-[2.5rem] shadow-2xl">
+                    <p class="text-[10px] font-bold text-green-400 uppercase tracking-widest mb-4 text-center">🔐 Escrow Pending Pickup</p>
+                    <button onclick="document.getElementById('cam-1').click()" class="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs">CAPTURE PICKUP</button>
+                    <input type="file" id="cam-1" capture="camera" class="hidden" onchange="previewPickup(this)">
                 </div>
-                <div id="photo-preview-pickup" class="w-full h-20 overflow-hidden rounded-xl"></div>
-            </div>
-        `;
-
-        initLiveRouting();
+            </div>`;
+        initMap();
         document.getElementById('primary-btn').innerText = "ARRIVED AT UNLOAD";
     }
 
-    function initLiveRouting() {
-        // Default start (City Center) if GPS fails
-        let startLat = 12.9716, startLng = 77.5946; 
-        let destLat = 12.8500, destLng = 77.6500; // Simulating "Green Valley Village"
-
-        map = L.map('map').setView([startLat, startLng], 12);
+    function initMap() {
+        map = L.map('map').setView([12.9716, 77.5946], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-        // Try to get real GPS location
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((pos) => {
-                startLat = pos.coords.latitude;
-                startLng = pos.coords.longitude;
-                
-                // Add Marker for Starting Position
-                L.marker([startLat, startLng]).addTo(map).bindPopup("Your Location").openPopup();
-                // Add Marker for Destination
-                L.marker([destLat, destLng]).addTo(map).bindPopup("Village Destination");
-
-                // Draw the Path (Line)
-                const path = L.polyline([[startLat, startLng], [destLat, destLng]], {color: '#16a34a', weight: 5, opacity: 0.7}).addTo(map);
-                map.fitBounds(path.getBounds());
-            });
-        }
+        L.marker([12.9716, 77.5946]).addTo(map).bindPopup("Current Position").openPopup();
+        L.polyline([[12.9716, 77.5946], [12.8500, 77.6500]], {color: '#16a34a', weight: 6}).addTo(map);
     }
 
-    function previewImage(input, targetId) {
+    function previewPickup(input) {
         if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById(targetId).innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover">`;
-                if(targetId === 'photo-preview-pickup') {
-                    escrowBalance = BUNDLE_VALUE;
-                    alert("🛡️ SMART ESCROW: $22.00 Secured from Shipper!");
-                }
-            };
-            reader.readAsDataURL(input.files[0]);
+            escrowBalance = BUNDLE_VALUE;
+            alert(`🛡️ SMART ESCROW SECURED: $${escrowBalance}.00 locked for driver.`);
         }
     }
 
-    // --- 4. THE REST OF THE FLOW ---
     function showVerificationQR() {
         currentStep = 'qrcode';
         const content = document.getElementById('app-content');
         content.innerHTML = `
-            <div class="flex flex-col items-center pt-4 animate-fade-in text-center">
-                <h2 class="text-xs font-black text-slate-400 uppercase mb-8">Proof of Delivery</h2>
-                <div onclick="completePayment()" class="p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50">
+            <div class="flex flex-col items-center pt-10 text-center animate-fade-in">
+                <div onclick="completePayment()" class="p-8 bg-white rounded-[3rem] shadow-2xl border-8 border-green-50">
                     <div id="qrcode"></div>
                 </div>
-                <p class="mt-6 font-black italic">SCAN TO RELEASE FUNDS</p>
-            </div>
-        `;
+                <p class="mt-8 font-black text-slate-400 uppercase tracking-tighter">Scan QR to Release Funds</p>
+            </div>`;
         new QRCode(document.getElementById("qrcode"), { text: "RELEASE", width: 180, height: 180 });
         document.getElementById('action-bar').style.display = "none";
     }
 
     function completePayment() {
-        const content = document.getElementById('app-content');
-        content.innerHTML = `<div class="p-10 text-center animate-fade-in">
-            <div class="text-6xl mb-6">💰</div>
-            <h1 class="text-3xl font-black italic">PAID $22.00</h1>
-            <p class="text-slate-400 mt-2">Instant transfer to your wallet successful.</p>
-            <button onclick="location.reload()" class="mt-10 text-xs font-bold underline">BACK TO START</button>
-        </div>`;
+        document.getElementById('app-content').innerHTML = `
+            <div class="p-10 text-center animate-fade-in">
+                <div class="h-24 w-24 bg-green-500 rounded-full flex items-center justify-center mx-auto text-5xl mb-8 shadow-2xl animate-bounce">💰</div>
+                <h1 class="text-4xl font-black italic tracking-tighter">PAID $22.00</h1>
+                <p class="text-slate-400 font-bold mt-4 uppercase text-[10px]">Successfully Transferred to Wallet</p>
+                <button onclick="location.reload()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">FINISH DEMO</button>
+            </div>`;
     }
 
     function renderShipperForm() {
         document.getElementById('app-content').innerHTML = `
-            <div class="bg-blue-600 p-8 rounded-[3rem] text-white animate-fade-in shadow-2xl">
-                <h2 class="text-2xl font-black italic mb-4">Shipper Panel</h2>
-                <p class="text-sm opacity-80 mb-6">Monitor your rural shipments in real-time.</p>
+            <div class="bg-blue-600 p-8 rounded-[3rem] text-white animate-fade-in">
+                <h2 class="text-2xl font-black italic mb-4">Shipper Tracking</h2>
                 <div class="bg-white/10 p-4 rounded-2xl border border-white/20">
-                    <p class="text-[10px] uppercase font-bold tracking-widest">Active Escrow</p>
-                    <p class="text-3xl font-black">$0.00</p>
+                    <p class="text-[9px] uppercase font-bold tracking-widest opacity-60">Professional Account Verified</p>
+                    <p class="text-lg font-bold">${userProfile.name}</p>
                 </div>
-            </div>
-        `;
+                <p class="mt-8 text-xs font-medium">Monitoring rural distribution channels...</p>
+            </div>`;
     }
 
     window.onload = renderProfileSetup;
