@@ -53,6 +53,7 @@
     </div>
 <script>
     // --- 1. GLOBAL STATE & LOCALIZATION ---
+    let shipperNotification = null; // Stores the message for the shipper
     let globalShipments = [
     { id: 402, name: "Agri-Bundle", detail: "To: Green Valley", weight: 120, price: 22, status: 'available' }
 ];
@@ -298,26 +299,28 @@ function updateCapacityUI() {
         actionBar.style.display = 'none';
     }
 }
-    function handlePrimaryAction() {
+ function handlePrimaryAction() {
     if(currentStep === 'matches') {
-        // Trigger the Celebration!
+        // 1. Trigger Confetti
         confetti({
             particleCount: 150,
             spread: 70,
-            origin: { y: 0.6 },
+            origin: { y: 0.8 },
             colors: ['#16a34a', '#2563eb', '#fbbf24']
         });
 
-        // Sync Status: Mark selected shipments as 'in-transit' in the Global State
+        // 2. Sync Status and Set Notification
         selectedBundles.forEach(selected => {
             const ship = globalShipments.find(gs => gs.name === selected.name);
-            if(ship) ship.status = 'in-transit';
+            if(ship) {
+                ship.status = 'in-transit';
+                // Set the specific notification message
+                shipperNotification = `🚚 Driver accepted your "${ship.name}" bundle!`;
+            }
         });
 
-        // Small delay so they see the confetti before the map opens
-        setTimeout(() => {
-            showRouteMap();
-        }, 1000);
+        // 3. Move to Map
+        setTimeout(() => { showRouteMap(); }, 1000);
 
     } else if(currentStep === 'map') {
         showVerificationQR();
@@ -420,43 +423,44 @@ function renderShipperView() {
     const content = document.getElementById('app-content');
     document.getElementById('action-bar').style.display = "none";
 
-    content.innerHTML = `
-        <div class="animate-fade-in space-y-6">
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                <h2 class="text-xl font-black italic mb-6 tracking-tighter text-blue-600">Dispatch New Load</h2>
-                
-                <div class="space-y-4">
-                    <input type="text" id="s-name" placeholder="Type of Load (e.g., Organic Wheat)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-                    
-                    <div class="flex gap-2">
-                        <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-                        <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-                    </div>
-
-                    <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
-
-                    <button onclick="broadcastLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
-                        BROADCAST TO DRIVERS
-                    </button>
-                </div>
+    // Create the Notification Toast HTML if a message exists
+    const notificationHtml = shipperNotification ? `
+        <div id="shipper-toast" class="bg-blue-600 text-white p-4 rounded-2xl mb-4 flex justify-between items-center animate-bounce shadow-lg">
+            <div class="flex items-center gap-3">
+                <span class="text-xl">📦</span>
+                <p class="text-xs font-black uppercase tracking-tighter">${shipperNotification}</p>
             </div>
-
-            <div class="px-2">
-                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 text-center">Your Active Dispatches</h3>
-                <div id="shipper-list" class="space-y-3">
-                    ${globalShipments.map(s => `
-                        <div class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
-                            <div>
-                                <p class="font-black text-slate-800">${s.name}</p>
-                                <p class="text-[9px] font-bold text-blue-500 uppercase">${s.weight}kg • ${s.status.toUpperCase()}</p>
-                            </div>
-                            <p class="font-black text-slate-900">${formatCurrency(s.price)}</p>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
+            <button onclick="clearNotification()" class="text-white opacity-50 hover:opacity-100">✕</button>
         </div>
+    ` : '';
+
+    content.innerHTML = `
+        <div class="animate-fade-in space-y-4">
+            ${notificationHtml}
+            
+            <div class="bg-white p-7 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <h2 class="text-2xl font-black italic mb-6 tracking-tighter text-blue-600">Dispatch Load</h2>
+                <div class="space-y-4">
+                    <input type="text" id="s-type" placeholder="Type of Load" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500 transition-all">
+                    <div class="flex gap-2">
+                        <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
+                        <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
+                    </div>
+                    <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
+                    <button onclick="broadcastLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg">BROADCAST</button>
+                </div>
+            </div>
+
+            </div>
     `;
+    
+    // Auto-clear notification after showing once? (Optional)
+    // shipperNotification = null; 
+}
+
+function clearNotification() {
+    shipperNotification = null;
+    renderShipperView();
 }
 
 function broadcastLoad() {
