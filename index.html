@@ -53,6 +53,9 @@
     </div>
 <script>
     // --- 1. GLOBAL STATE & LOCALIZATION ---
+    let globalShipments = [
+    { id: 402, name: "Agri-Bundle", detail: "To: Green Valley", weight: 120, price: 22, status: 'available' }
+];
     const USD_TO_INR = 83.50; 
     const BUNDLE_VALUE_USD = 22; 
     let selectedBundles = []; // Track multiple selections
@@ -392,7 +395,6 @@ function showRouteMap() {
 
     // --- 5. SHIPPER VIEW ---
   let pathHistory = []; // Global to store coordinates the driver has touched
-
 function renderShipperView() {
     const content = document.getElementById('app-content');
     document.getElementById('action-bar').style.display = "none";
@@ -400,51 +402,62 @@ function renderShipperView() {
     content.innerHTML = `
         <div class="animate-fade-in space-y-6">
             <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                <div class="flex justify-between items-start mb-6">
-                    <div>
-                        <h2 class="text-lg font-black text-slate-800 tracking-tight italic">Breadcrumb Trace</h2>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Real-Time Path Auditing</p>
-                    </div>
-                    <span id="live-indicator" class="bg-green-100 text-green-600 text-[10px] px-3 py-1 rounded-full font-black animate-pulse">GPS ACTIVE</span>
-                </div>
-
-                <div id="shipper-map" class="h-64 w-full rounded-3xl bg-slate-100 mb-6 shadow-inner border-4 border-white"></div>
+                <h2 class="text-xl font-black italic mb-6 tracking-tighter text-blue-600">Dispatch New Load</h2>
                 
-                <div class="grid grid-cols-2 gap-4 bg-slate-900 p-5 rounded-[2rem] text-white">
-                    <div>
-                        <p class="text-[8px] text-slate-400 font-black uppercase mb-1">Distance Covered</p>
-                        <p id="dist-covered" class="text-lg font-black text-green-400">0.0 km</p>
+                <div class="space-y-4">
+                    <input type="text" id="s-name" placeholder="Type of Load (e.g., Organic Wheat)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                    
+                    <div class="flex gap-2">
+                        <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                        <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
                     </div>
-                    <div class="text-right">
-                        <p class="text-[8px] text-slate-400 font-black uppercase mb-1">Path Integrity</p>
-                        <p class="text-lg font-black text-blue-400">VERIFIED</p>
-                    </div>
+
+                    <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+
+                    <button onclick="broadcastLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
+                        BROADCAST TO DRIVERS
+                    </button>
                 </div>
             </div>
-        </div>`;
 
-    setTimeout(() => {
-        const sMap = L.map('shipper-map', { zoomControl: false }).setView([driverPos.lat, driverPos.lng], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sMap);
-        
-        // 1. Planned Route (Faint line)
-        L.polyline([[driverPos.lat, driverPos.lng], [destPos.lat, destPos.lng]], {
-            color: '#cbd5e1', 
-            weight: 4,
-            dashArray: '10, 10'
-        }).addTo(sMap);
+            <div class="px-2">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 text-center">Your Active Dispatches</h3>
+                <div id="shipper-list" class="space-y-3">
+                    ${globalShipments.map(s => `
+                        <div class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
+                            <div>
+                                <p class="font-black text-slate-800">${s.name}</p>
+                                <p class="text-[9px] font-bold text-blue-500 uppercase">${s.weight}kg • ${s.status.toUpperCase()}</p>
+                            </div>
+                            <p class="font-black text-slate-900">${formatCurrency(s.price)}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
 
-        // 2. Actual Movement Trace (Solid bold line)
-        const traceLine = L.polyline([], { color: '#2563eb', weight: 6, lineCap: 'round' }).addTo(sMap);
-        
-        const truckIcon = L.divIcon({ className: 'bg-blue-600 w-4 h-4 rounded-full border-4 border-white shadow-xl' });
-        const driverMarker = L.marker([driverPos.lat, driverPos.lng], { icon: truckIcon }).addTo(sMap);
+function broadcastLoad() {
+    const name = document.getElementById('s-name').value;
+    const weight = parseInt(document.getElementById('s-weight').value);
+    const priceINR = parseInt(document.getElementById('s-price').value);
+    const dest = document.getElementById('s-dest').value;
 
-        // Reset history for fresh demo
-        pathHistory = [[driverPos.lat, driverPos.lng]];
-        
-        startBreadcrumbTracking(driverMarker, traceLine, sMap);
-    }, 300);
+    if(!name || !weight || !priceINR || !dest) return alert("Please fill all details!");
+
+    const newLoad = {
+        id: Math.floor(Math.random() * 900) + 100,
+        name: name,
+        detail: `To: ${dest}`,
+        weight: weight,
+        price: priceINR / USD_TO_INR, // Convert to USD for global logic
+        status: 'available'
+    };
+
+    globalShipments.push(newLoad);
+    alert(`🚀 ${name} has been broadcasted to all drivers!`);
+    renderShipperView(); // Refresh the shipper's own list
 }
 function startSimulatedTracking(marker, mapInstance) {
     let step = 0;
