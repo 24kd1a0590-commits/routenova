@@ -4,104 +4,97 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>RouteNova | Smart Rural Logistics</title>
-    
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
 
     <style>
-        @keyframes progress {
-    0% { width: 0%; }
-    100% { width: 100%; }
-}
-.animate-progress-fill {
-    animation: progress 3s ease-in-out forwards;
-}
-        #map { height: 300px; width: 100%; border-radius: 1.5rem; }
+        #map { height: 350px; width: 100%; border-radius: 2.5rem; border: 4px solid white; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1); }
         .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
-        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-slate-100 font-sans antialiased text-slate-900">
 
     <div class="app-container bg-white shadow-2xl flex flex-col min-h-screen relative">
-        
         <header class="p-6 flex justify-between items-center border-b bg-white sticky top-0 z-50">
             <div>
                 <h1 class="text-2xl font-black text-green-600 italic tracking-tighter">RouteNova</h1>
                 <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Rural Micro-Logistics</p>
             </div>
-            <div id="status-pill" class="bg-green-100 text-green-700 text-[10px] px-3 py-1 rounded-full font-bold">DRIVER ONLINE</div>
+            <div id="status-pill" class="bg-green-100 text-green-700 text-[10px] px-3 py-1 rounded-full font-bold uppercase">System Active</div>
         </header>
 
-        <div class="flex p-2 bg-slate-100 m-4 rounded-2xl">
-            <button onclick="switchView('driver')" id="tab-driver" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all bg-white shadow-sm text-green-600">Driver View</button>
-            <button onclick="switchView('shipper')" id="tab-shipper" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all text-slate-500">Shipper View</button>
+        <div id="nav-tabs" class="flex p-2 bg-slate-100 m-4 rounded-2xl hidden">
+            <button onclick="switchView('driver')" id="tab-driver" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all">Driver View</button>
+            <button onclick="switchView('shipper')" id="tab-shipper" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all">Shipper View</button>
         </div>
 
-        <main id="app-content" class="flex-1 p-4 pb-32">
-            </main>
+        <main id="app-content" class="flex-1 p-4 pb-32"></main>
 
-        <div id="action-bar" class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto p-6 bg-gradient-to-t from-white via-white to-transparent">
-            <button id="primary-btn" onclick="handlePrimaryAction()" class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all transform active:scale-95 flex justify-center items-center gap-2">
-                ACCEPT ALL BUNDLES ($22)
+        <div id="action-bar" class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto p-6 bg-gradient-to-t from-white via-white to-transparent hidden">
+            <button id="primary-btn" onclick="handlePrimaryAction()" class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all transform active:scale-95 flex justify-center items-center gap-2 uppercase tracking-tight">
+                Accept Bundles
             </button>
         </div>
     </div>
+
 <script>
-    // --- 1. GLOBAL STATE & LOCALIZATION ---
-    const USD_TO_INR = 83.50; 
-    const BUNDLE_VALUE_USD = 22; 
-    
-    let escrowBalance = 0;
-    let currentRole = null; 
-    let currentStep = 'matches'; 
-    let userProfile = { name: null, role: null };
+    // --- 1. LOCAL STORAGE ENGINE ---
+    const USD_TO_INR = 83.50;
+    const MAX_CAP = 500;
+
+    function initDB() {
+        if (!localStorage.getItem('rn_shipments')) {
+            localStorage.setItem('rn_shipments', JSON.stringify([
+                { id: 101, name: "Agri-Bundle", detail: "To: Green Valley", weight: 120, price: 22, status: 'available', color: 'green' }
+            ]));
+        }
+    }
+    const getDB = () => JSON.parse(localStorage.getItem('rn_shipments'));
+    const saveDB = (db) => localStorage.setItem('rn_shipments', JSON.stringify(db));
+
+    // --- 2. GLOBAL STATE ---
+    let selectedBundles = [];
+    let totalWeight = 0;
+    let totalPriceUSD = 0;
+    let currentRole = null;
+    let currentStep = 'matches';
     let driverPos = { lat: 12.9716, lng: 77.5946 };
     let destPos = { lat: 12.8500, lng: 77.6500 };
-    let isMoving = false;
-    let map = null;
 
-    function formatCurrency(amountUSD) {
-        const inrValue = (amountUSD * USD_TO_INR);
-        return inrValue.toLocaleString('en-IN', {
-            maximumFractionDigits: 0,
-            style: 'currency',
-            currency: 'INR',
-        });
-    }
+    const formatCurrency = (usd) => (usd * USD_TO_INR).toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' });
 
-    // --- 2. AUTH & PROFILE SETUP ---
+    // --- 3. AUTH / ENTRY ---
     function renderProfileSetup() {
-        const content = document.getElementById('app-content');
-        document.getElementById('action-bar').style.display = "none";
-        document.querySelector('.flex.p-2.bg-slate-100').style.display = "none";
-
-        content.innerHTML = `
+        initDB();
+        document.getElementById('app-content').innerHTML = `
             <div class="animate-fade-in p-2">
                 <h2 class="text-3xl font-black italic mb-8 tracking-tighter">RouteNova India</h2>
                 <div class="grid grid-cols-1 gap-4 mb-6">
-                    <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                    <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer">
                         <div class="flex justify-between items-center">
                             <div><h3 class="font-black text-xl">Driver</h3><p class="text-[10px] text-slate-400 font-bold uppercase">Earn on Return</p></div>
                             <span class="text-3xl">🚚</span>
                         </div>
                     </div>
-                    <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                    <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer">
                         <div class="flex justify-between items-center">
                             <div><h3 class="font-black text-xl">Shipper</h3><p class="text-[10px] text-slate-400 font-bold uppercase">Send Goods</p></div>
                             <span class="text-3xl">📦</span>
                         </div>
                     </div>
                 </div>
-                <div id="reg-form" class="hidden space-y-4 bg-slate-50 p-6 rounded-[2.5rem]">
-                    <input type="text" id="u-name" placeholder="Full Name" class="w-full p-4 rounded-2xl border-none font-bold shadow-sm outline-none">
-                    <input type="tel" id="u-phone" placeholder="Phone Number" class="w-full p-4 rounded-2xl border-none font-bold shadow-sm outline-none">
-                    <button onclick="finalizeAuth()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-xl">VERIFY IDENTITY</button>
+                <div id="reg-form" class="hidden space-y-4">
+                    <input type="text" id="u-name" placeholder="Enter Name" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-green-500">
+                    <button onclick="finalizeAuth()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem]">START SESSION</button>
                 </div>
-            </div>
-        `;
+            </div>`;
     }
 
     function selectRole(role) {
@@ -112,164 +105,215 @@
     }
 
     function finalizeAuth() {
-        userProfile.name = document.getElementById('u-name').value;
-        userProfile.role = currentRole;
-        if(!userProfile.name) return alert("Enter Name");
-        
-        document.querySelector('.flex.p-2.bg-slate-100').style.display = "flex";
+        if(!document.getElementById('u-name').value) return alert("Please enter your name");
+        document.getElementById('nav-tabs').classList.remove('hidden');
         switchView(currentRole);
     }
 
-    // --- 3. NAVIGATION LOGIC ---
     function switchView(role) {
-        if(userProfile.role && role !== userProfile.role) {
-            alert(`Locked as ${userProfile.role.toUpperCase()}`);
-            return;
-        }
         currentRole = role;
+        const dt = document.getElementById('tab-driver'), st = document.getElementById('tab-shipper');
+        dt.className = "flex-1 py-2 text-sm font-bold rounded-xl transition-all " + (role === 'driver' ? "bg-white shadow-sm text-green-600" : "text-slate-500");
+        st.className = "flex-1 py-2 text-sm font-bold rounded-xl transition-all " + (role === 'shipper' ? "bg-white shadow-sm text-blue-600" : "text-slate-500");
         role === 'driver' ? renderDriverMatches() : renderShipperView();
     }
 
-    // --- 4. DRIVER VIEW ---
+    // --- 4. DRIVER LOGIC (GRAPHS & CAPACITY) ---
     function renderDriverMatches() {
-        const content = document.getElementById('app-content');
-        if(currentStep === 'map') { showRouteMap(); return; }
-        if(currentStep === 'qrcode') { showVerificationQR(); return; }
-
-        content.innerHTML = `
-            <div class="animate-fade-in p-2">
-                <div class="bg-green-600 p-6 rounded-[2rem] text-white mb-6">
-                    <p class="text-[10px] font-bold uppercase mb-2">Destination</p>
-                    <input type="text" id="dest" value="Green Valley Village" class="w-full p-4 rounded-2xl text-slate-900 font-bold mb-3">
-                    <button onclick="findLoads()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs">FIND LOADS</button>
+        currentStep = 'matches';
+        document.getElementById('action-bar').classList.add('hidden');
+        document.getElementById('app-content').innerHTML = `
+            <div class="animate-fade-in">
+                <div class="bg-green-600 p-6 rounded-[2rem] text-white mb-6 shadow-lg">
+                    <p class="text-[10px] font-black uppercase mb-2 text-green-200">Current Route Path</p>
+                    <input type="text" value="Green Valley Village" class="w-full p-4 rounded-2xl text-slate-900 font-bold mb-3 outline-none">
+                    <button onclick="loadAvailableShipments()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs tracking-widest">SCAN LOADS</button>
                 </div>
-                <div id="results"></div>
+                <div id="driver-results"></div>
             </div>`;
     }
 
-    function findLoads() {
-        const res = document.getElementById('results');
+    function loadAvailableShipments() {
+        const db = getDB().filter(s => s.status === 'available');
+        const res = document.getElementById('driver-results');
+        
         res.innerHTML = `
-            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-green-500 cursor-pointer" onclick="document.getElementById('action-bar').style.display='block'">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <h3 class="font-black text-slate-800 text-lg italic">Agri-Bundle #402</h3>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">📦 4x Rice Sacks (120kg)</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-2xl font-black text-green-600">${formatCurrency(BUNDLE_VALUE_USD)}</p>
-                        <p class="text-[8px] text-slate-300 font-bold uppercase text-nowrap">Escrow Ready</p>
-                    </div>
+            <div id="impact-card" class="hidden bg-slate-900 p-6 rounded-[2.5rem] text-white mb-6">
+                <h4 class="text-[10px] font-black uppercase text-green-400 mb-4">Efficiency Dashboard</h4>
+                <div class="flex items-end justify-around h-24 gap-4 px-2">
+                    <div class="flex flex-col items-center flex-1"><div id="graph-co2" class="bg-green-500 w-full rounded-t-lg transition-all duration-700" style="height: 0%"></div><p class="text-[7px] mt-2 font-black text-slate-500 uppercase">CO2</p></div>
+                    <div class="flex flex-col items-center flex-1"><div id="graph-fuel" class="bg-blue-500 w-full rounded-t-lg transition-all duration-700" style="height: 0%"></div><p class="text-[7px] mt-2 font-black text-slate-500 uppercase">Fuel</p></div>
+                    <div class="flex flex-col items-center flex-1"><div id="graph-profit" class="bg-yellow-500 w-full rounded-t-lg transition-all duration-700" style="height: 0%"></div><p class="text-[7px] mt-2 font-black text-slate-500 uppercase">Profit</p></div>
                 </div>
-            </div>`;
+                <div id="impact-metrics" class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-800"></div>
+            </div>
+
+            <div class="bg-white p-4 rounded-3xl border border-slate-100 mb-6">
+                <div class="flex justify-between mb-2 text-[9px] font-black uppercase tracking-tighter"><span>Truck Payload</span><span id="cap-text">0/500 kg</span></div>
+                <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div id="cap-bar" class="bg-green-500 h-full transition-all duration-500" style="width: 0%"></div></div>
+            </div>
+
+            <div class="space-y-4">${db.map(load => `
+                <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-transparent cursor-pointer transition-all" onclick="selectBundle(this, ${load.price}, ${load.weight}, '${load.name}')">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-black text-slate-800 text-lg italic">${load.name}</h3>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">${load.detail} (${load.weight}kg)</p>
+                        </div>
+                        <p class="text-2xl font-black text-green-600">${formatCurrency(load.price)}</p>
+                    </div>
+                </div>`).join('')}</div>`;
+    }
+
+    function selectBundle(el, price, weight, name) {
+        const idx = selectedBundles.findIndex(b => b.name === name);
+        if(idx > -1) { 
+            selectedBundles.splice(idx, 1); 
+            el.classList.remove('border-green-500', 'bg-green-50/50');
+        } else {
+            if(totalWeight + weight > MAX_CAP) return alert("Truck Overload!");
+            selectedBundles.push({name, price, weight});
+            el.classList.add('border-green-500', 'bg-green-50/50');
+        }
+        
+        totalWeight = selectedBundles.reduce((s, b) => s + b.weight, 0);
+        totalPriceUSD = selectedBundles.reduce((s, b) => s + b.price, 0);
+        
+        const perc = (totalWeight/MAX_CAP)*100;
+        document.getElementById('cap-bar').style.width = perc + '%';
+        document.getElementById('cap-text').innerText = `${totalWeight}/${MAX_CAP} kg (${Math.round(perc)}%)`;
+        
+        if(selectedBundles.length > 0) {
+            document.getElementById('impact-card').classList.remove('hidden');
+            document.getElementById('action-bar').classList.remove('hidden');
+            document.getElementById('graph-co2').style.height = '65%';
+            document.getElementById('graph-fuel').style.height = '40%';
+            document.getElementById('graph-profit').style.height = '85%';
+            document.getElementById('impact-metrics').innerHTML = `
+                <div><p class="text-[8px] font-black text-green-400 uppercase">CO2 Prevented</p><p class="text-lg font-black">${(selectedBundles.length * 2.8).toFixed(1)}kg</p></div>
+                <div><p class="text-[8px] font-black text-blue-400 uppercase">Fuel Saved</p><p class="text-lg font-black">${(selectedBundles.length * 1.1).toFixed(1)}L</p></div>`;
+            document.getElementById('primary-btn').innerText = `ACCEPT ${selectedBundles.length} BUNDLES (${formatCurrency(totalPriceUSD)})`;
+        } else {
+            document.getElementById('impact-card').classList.add('hidden');
+            document.getElementById('action-bar').classList.add('hidden');
+        }
     }
 
     function handlePrimaryAction() {
-        if(currentStep === 'matches') showRouteMap();
-        else if(currentStep === 'map') showVerificationQR();
+        if(currentStep === 'matches') {
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.8 } });
+            // Save to DB
+            const db = getDB();
+            selectedBundles.forEach(sel => {
+                const item = db.find(s => s.name === sel.name);
+                if(item) item.status = 'in-transit';
+            });
+            saveDB(db);
+            setTimeout(showRouteMap, 1000);
+        } else if(currentStep === 'map') showVerificationQR();
     }
 
     function showRouteMap() {
         currentStep = 'map';
-        isMoving = true;
-        const content = document.getElementById('app-content');
-        content.innerHTML = `
+        document.getElementById('primary-btn').innerText = "ARRIVED AT UNLOAD";
+        document.getElementById('app-content').innerHTML = `
             <div class="animate-fade-in">
-                <div id="map" style="height: 350px;" class="rounded-[2.5rem] mb-6 shadow-xl border-4 border-white"></div>
+                <div id="map" class="mb-4"></div>
                 <div class="bg-slate-900 p-6 rounded-[2.5rem] text-white">
-                    <p class="text-[10px] font-bold text-green-400 uppercase text-center mb-4">Step 1: Capture Pickup</p>
-                    <button onclick="document.getElementById('cam-1').click()" class="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs">LOCK ESCROW</button>
-                    <input type="file" id="cam-1" capture="camera" class="hidden" onchange="previewPickup(this)">
+                    <p class="text-[10px] text-green-400 font-bold uppercase text-center mb-4 italic">Secure Escrow Path Active</p>
+                    <button onclick="alert('Pickup Photo Captured & Locked in Escrow')" class="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase">Capture Pickup Proof</button>
                 </div>
             </div>`;
-        
         setTimeout(() => {
-            map = L.map('map').setView([driverPos.lat, driverPos.lng], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            L.marker([driverPos.lat, driverPos.lng]).addTo(map);
-            L.polyline([[driverPos.lat, driverPos.lng], [destPos.lat, destPos.lng]], {color: '#16a34a', weight: 6}).addTo(map);
+            const m = L.map('map').setView([driverPos.lat, driverPos.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(m);
+            L.Routing.control({ 
+                waypoints: [L.latLng(driverPos.lat, driverPos.lng), L.latLng(destPos.lat, destPos.lng)],
+                lineOptions: { styles: [{color: '#16a34a', weight: 6}] },
+                createMarker: () => null 
+            }).addTo(m);
         }, 200);
-        document.getElementById('primary-btn').innerText = "ARRIVED AT UNLOAD";
-    }
-
-    function previewPickup(input) {
-        if (input.files && input.files[0]) {
-            escrowBalance = BUNDLE_VALUE_USD;
-            alert(`🛡️ SMART ESCROW SECURED: ${formatCurrency(BUNDLE_VALUE_USD)} locked.`);
-        }
     }
 
     function showVerificationQR() {
         currentStep = 'qrcode';
-        const content = document.getElementById('app-content');
-        content.innerHTML = `
-            <div class="flex flex-col items-center pt-6 animate-fade-in">
-                <div class="bg-white p-6 rounded-[2.5rem] shadow-xl mb-8 w-full">
-                    <p class="text-xs font-black text-center mb-4 text-slate-400 uppercase tracking-widest">Step 2: Unload Proof</p>
-                    <button onclick="document.getElementById('cam-2').click()" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px]">CAPTURE UNPACKING</button>
-                    <input type="file" id="cam-2" capture="camera" class="hidden" onchange="enableQR(this)">
-                </div>
-                <div id="qr-box" class="hidden p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50" onclick="completePayment()">
-                    <div id="qrcode"></div>
+        document.getElementById('action-bar').classList.add('hidden');
+        document.getElementById('app-content').innerHTML = `
+            <div class="animate-fade-in flex flex-col items-center pt-10">
+                <div class="bg-white p-8 rounded-[3rem] shadow-2xl text-center border">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Unload Verification</p>
+                    <div id="qrcode" class="bg-slate-50 p-6 rounded-3xl mb-6 inline-block"></div>
+                    <button onclick="finalizeDelivery()" class="w-full bg-green-600 text-white py-4 px-8 rounded-2xl font-black uppercase">Release My Payment</button>
                 </div>
             </div>`;
-        document.getElementById('action-bar').style.display = "none";
+        setTimeout(() => new QRCode(document.getElementById("qrcode"), { text: "RELEASE_FUNDS", width: 160, height: 160 }), 200);
     }
 
-    function enableQR(input) {
-        if (input.files && input.files[0]) {
-            document.getElementById('qr-box').classList.remove('hidden');
-            new QRCode(document.getElementById("qrcode"), { text: "RELEASE", width: 160, height: 160 });
-        }
-    }
-
-    function completePayment() {
-        isMoving = false;
+    function finalizeDelivery() {
+        // Mark as Delivered
+        const db = getDB();
+        db.forEach(s => { if(s.status === 'in-transit') s.status = 'delivered'; });
+        saveDB(db);
         document.getElementById('app-content').innerHTML = `
             <div class="p-10 text-center animate-fade-in">
-                <div class="text-6xl mb-8">💰</div>
-                <h1 class="text-4xl font-black italic tracking-tighter uppercase">PAID ${formatCurrency(BUNDLE_VALUE_USD)}</h1>
-                <p class="text-slate-400 font-bold mt-4 uppercase text-[10px]">Instant UPI Settlement Successful</p>
-                <button onclick="location.reload()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">FINISH TRIP</button>
+                <div class="text-6xl mb-6">💰</div>
+                <h1 class="text-4xl font-black italic tracking-tighter">PAYMENT RECEIVED!</h1>
+                <p class="text-slate-400 font-bold mt-4 uppercase text-xs">Instant Settlement Completed</p>
+                <button onclick="location.reload()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">START NEW TRIP</button>
             </div>`;
     }
 
     // --- 5. SHIPPER VIEW ---
     function renderShipperView() {
-        const content = document.getElementById('app-content');
-        document.getElementById('action-bar').style.display = "none";
-
-        content.innerHTML = `
+        const db = getDB();
+        document.getElementById('action-bar').classList.add('hidden');
+        document.getElementById('app-content').innerHTML = `
             <div class="animate-fade-in space-y-6">
-                <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                    <div class="flex justify-between items-start mb-6">
-                        <div>
-                            <h2 class="text-lg font-black text-slate-800 tracking-tight italic">Live Track</h2>
-                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Order #RN-9921</p>
+                <div class="bg-white p-7 rounded-[2.5rem] shadow-xl border border-slate-100">
+                    <h2 class="text-2xl font-black italic mb-6 text-blue-600 tracking-tighter">Dispatch New Load</h2>
+                    <div class="space-y-4">
+                        <input type="text" id="s-name" placeholder="Item Name (e.g. Wheat Sacks)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                        <div class="flex gap-2">
+                            <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
+                            <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
                         </div>
-                        <span class="bg-blue-100 text-blue-600 text-[10px] px-3 py-1 rounded-full font-black animate-pulse">LIVE</span>
+                        <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
+                        <button onclick="broadcastNewLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg uppercase">Broadcast Load</button>
                     </div>
-                    <div id="shipper-map" class="h-48 w-full rounded-3xl bg-slate-100 mb-6 shadow-inner border-4 border-white"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-5 rounded-3xl">
-                        <div>
-                            <p class="text-[10px] text-slate-400 font-black uppercase">Escrow Total</p>
-                            <p class="text-xl font-black text-slate-800">${formatCurrency(BUNDLE_VALUE_USD)}</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-[10px] text-slate-400 font-black uppercase">Status</p>
-                            <p class="text-xs font-black text-green-600">SECURED</p>
-                        </div>
+                </div>
+                <div class="px-2">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 text-center italic">Active Load History</h3>
+                    <div class="space-y-3" id="shipper-list">
+                        ${db.map(s => `
+                            <div class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
+                                <div><p class="font-black text-slate-800 italic">${s.name}</p><p class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">${s.weight}kg • ${s.status}</p></div>
+                                <p class="font-black text-slate-900">${formatCurrency(s.price)}</p>
+                            </div>`).join('')}
                     </div>
                 </div>
             </div>`;
+    }
 
-        setTimeout(() => {
-            const sMap = L.map('shipper-map', { zoomControl: false }).setView([driverPos.lat, driverPos.lng], 12);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sMap);
-            L.marker([driverPos.lat, driverPos.lng], {
-                icon: L.divIcon({ className: 'bg-blue-600 w-3 h-3 rounded-full border-2 border-white' })
-            }).addTo(sMap);
-        }, 300);
+    function broadcastNewLoad() {
+        const name = document.getElementById('s-name').value;
+        const weight = parseInt(document.getElementById('s-weight').value);
+        const price = parseInt(document.getElementById('s-price').value);
+        const dest = document.getElementById('s-dest').value;
+
+        if(!name || !weight || !price) return alert("Please fill all details!");
+
+        const db = getDB();
+        db.push({
+            id: Date.now(),
+            name: name,
+            detail: `To: ${dest}`,
+            weight: weight,
+            price: price / USD_TO_INR,
+            status: 'available'
+        });
+        saveDB(db);
+        alert("🚀 Load broadcasted successfully!");
+        renderShipperView();
     }
 
     window.onload = renderProfileSetup;

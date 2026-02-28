@@ -1,48 +1,401 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RouteNova | Smart Rural Logistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+
+    <style>
+        #map { height: 300px; width: 100%; border-radius: 1.5rem; }
+        .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
-<body class="bg-slate-50 p-4">
-    <div class="flex gap-2 mb-6">
-        <button onclick="showRole('driver')" class="bg-green-600 text-white px-4 py-2 rounded-full text-xs">Driver View</button>
-        <button onclick="showRole('shipper')" class="bg-blue-600 text-white px-4 py-2 rounded-full text-xs">Shipper View</button>
+<body class="bg-slate-100 font-sans antialiased text-slate-900">
+
+    <div class="app-container bg-white shadow-2xl flex flex-col min-h-screen relative">
+        
+        <header class="p-6 flex justify-between items-center border-b bg-white sticky top-0 z-50">
+            <div>
+                <h1 class="text-2xl font-black text-green-600 italic tracking-tighter">RouteNova</h1>
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Rural Micro-Logistics</p>
+            </div>
+            <button onclick="resetDB()" class="text-[8px] bg-slate-100 px-2 py-1 rounded font-bold text-slate-400 uppercase">Reset DB</button>
+        </header>
+
+        <div id="navigation-tabs" class="flex p-2 bg-slate-100 m-4 rounded-2xl hidden">
+            <button onclick="switchView('driver')" id="tab-driver" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all bg-white shadow-sm text-green-600">Driver View</button>
+            <button onclick="switchView('shipper')" id="tab-shipper" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all text-slate-500">Shipper View</button>
+        </div>
+
+        <main id="app-content" class="flex-1 p-4 pb-32"></main>
+
+        <div id="action-bar" class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto p-6 bg-gradient-to-t from-white via-white to-transparent hidden">
+            <button id="primary-btn" onclick="handlePrimaryAction()" class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all transform active:scale-95 flex justify-center items-center gap-2">
+                ACCEPT BUNDLES
+            </button>
+        </div>
     </div>
 
-    <div id="main-content"></div>
+<script>
+    // --- 1. DATABASE LOGIC (LOCALSTORAGE) ---
+    const USD_TO_INR = 83.50;
+    const MAX_CAP = 500;
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-
-        function showRole(role) {
-            const content = document.getElementById('main-content');
-            if (role === 'driver') {
-                content.innerHTML = `
-                    <h1 class="text-xl font-bold mb-4">Backhaul Matches</h1>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500 mb-3">
-                        <p class="text-sm font-bold">Package: 4x Rice Sacks</p>
-                        <p class="text-xs text-gray-500">Pickup: City Market | Pay: $15</p>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
-                        <p class="text-sm font-bold">Package: Tools Box</p>
-                        <p class="text-xs text-gray-500">Pickup: Market Gate 2 | Pay: $7</p>
-                    </div>
-                `;
-                tg.MainButton.setText("ACCEPT ALL LOADS ($22)");
-                tg.MainButton.show();
-            } else {
-                content.innerHTML = `
-                    <h1 class="text-xl font-bold mb-4">Send Goods to Village</h1>
-                    <input type="text" placeholder="What are you sending?" class="w-full p-3 rounded-lg border mb-3">
-                    <input type="number" placeholder="Weight (kg)" class="w-full p-3 rounded-lg border mb-3">
-                    <button class="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">Find Returning Truck</button>
-                `;
-                tg.MainButton.hide();
-            }
+    function initDB() {
+        if (!localStorage.getItem('globalShipments')) {
+            localStorage.setItem('globalShipments', JSON.stringify([
+                { id: 101, name: "Sample Rice", detail: "To: Green Valley", weight: 50, price: 15, status: 'available' }
+            ]));
         }
-        showRole('driver'); // Default
-    </script>
+        if (!localStorage.getItem('appState')) {
+            localStorage.setItem('appState', JSON.stringify({
+                isEscrowLocked: false,
+                isPaymentReleased: false,
+                pickupPhoto: null,
+                notification: null
+            }));
+        }
+    }
+
+    const getDB = () => JSON.parse(localStorage.getItem('globalShipments'));
+    const saveDB = (data) => localStorage.setItem('globalShipments', JSON.stringify(data));
+    const getState = () => JSON.parse(localStorage.getItem('appState'));
+    const saveState = (data) => localStorage.setItem('appState', JSON.stringify(data));
+    const resetDB = () => { localStorage.clear(); location.reload(); };
+
+    // --- 2. GLOBAL APP STATE ---
+    let selectedBundles = [];
+    let totalWeight = 0;
+    let totalPriceUSD = 0;
+    let currentRole = null;
+    let currentStep = 'matches';
+    let userProfile = { name: null, role: null };
+    let driverPos = { lat: 12.9716, lng: 77.5946 };
+    let destPos = { lat: 12.8500, lng: 77.6500 };
+
+    function formatCurrency(amountUSD) {
+        return (amountUSD * USD_TO_INR).toLocaleString('en-IN', {
+            maximumFractionDigits: 0, style: 'currency', currency: 'INR',
+        });
+    }
+
+    // --- 3. AUTH & NAVIGATION ---
+    function renderProfileSetup() {
+        initDB();
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="animate-fade-in p-2 text-center">
+                <h2 class="text-3xl font-black italic mb-8 tracking-tighter">Enter RouteNova</h2>
+                <div class="grid grid-cols-1 gap-4 mb-6">
+                    <button onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] flex justify-between items-center transition-all">
+                        <div class="text-left"><h3 class="font-black text-xl">Driver</h3><p class="text-[10px] text-slate-400 font-bold uppercase">Fill Empty Trips</p></div>
+                        <span class="text-3xl">🚚</span>
+                    </button>
+                    <button onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] flex justify-between items-center transition-all">
+                        <div class="text-left"><h3 class="font-black text-xl">Shipper</h3><p class="text-[10px] text-slate-400 font-bold uppercase">Dispatch Goods</p></div>
+                        <span class="text-3xl">📦</span>
+                    </button>
+                </div>
+                <div id="reg-form" class="hidden space-y-4">
+                    <input type="text" id="u-name" placeholder="Full Name" class="w-full p-4 rounded-2xl bg-slate-50 font-bold border-none outline-none shadow-sm">
+                    <button onclick="finalizeAuth()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem]">START SESSION</button>
+                </div>
+            </div>`;
+    }
+
+    function selectRole(role) {
+        currentRole = role;
+        document.getElementById('reg-form').classList.remove('hidden');
+        document.getElementById('role-driver').style.borderColor = role === 'driver' ? '#16a34a' : '#f1f5f9';
+        document.getElementById('role-shipper').style.borderColor = role === 'shipper' ? '#2563eb' : '#f1f5f9';
+    }
+
+    function finalizeAuth() {
+        userProfile.name = document.getElementById('u-name').value;
+        userProfile.role = currentRole;
+        if(!userProfile.name) return alert("Enter Name");
+        document.getElementById('navigation-tabs').classList.remove('hidden');
+        switchView(currentRole);
+    }
+
+    function switchView(role) {
+        currentRole = role;
+        const driverTab = document.getElementById('tab-driver');
+        const shipperTab = document.getElementById('tab-shipper');
+        
+        if(role === 'driver') {
+            driverTab.classList.add('bg-white', 'shadow-sm', 'text-green-600');
+            shipperTab.classList.remove('bg-white', 'shadow-sm', 'text-green-600');
+            renderDriverMatches();
+        } else {
+            shipperTab.classList.add('bg-white', 'shadow-sm', 'text-blue-600');
+            driverTab.classList.remove('bg-white', 'shadow-sm', 'text-green-600');
+            renderShipperView();
+        }
+    }
+
+    // --- 4. DRIVER LOGIC ---
+    function renderDriverMatches() {
+        const content = document.getElementById('app-content');
+        if(currentStep === 'map') return showRouteMap();
+        if(currentStep === 'qrcode') return showVerificationQR();
+
+        content.innerHTML = `
+            <div class="animate-fade-in p-2">
+                <div class="bg-green-600 p-6 rounded-[2.5rem] text-white mb-6">
+                    <p class="text-[10px] font-bold uppercase mb-1">Active Route</p>
+                    <h2 class="text-xl font-black italic mb-4">Malur Village Connection</h2>
+                    <button onclick="findLoads()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs">RE-SCAN FOR LOADS</button>
+                </div>
+                <div id="results"></div>
+            </div>`;
+        findLoads();
+    }
+
+    function findLoads() {
+        const res = document.getElementById('results');
+        const db = getDB();
+        const available = db.filter(s => s.status === 'available');
+
+        res.innerHTML = `
+            <div id="impact-card" class="hidden bg-slate-900 p-6 rounded-[2.5rem] text-white mb-6">
+                <div class="flex justify-around items-end h-20 gap-2">
+                    <div id="graph-co2" class="bg-green-500 w-full rounded-t-lg transition-all" style="height:0%"></div>
+                    <div id="graph-fuel" class="bg-blue-500 w-full rounded-t-lg transition-all" style="height:0%"></div>
+                </div>
+                <p class="text-[8px] font-black text-center mt-2 text-slate-500">ENVIRONMENTAL SAVINGS PROJECTION</p>
+            </div>
+            <div id="capacity-container" class="bg-white p-4 rounded-3xl border border-slate-100 mb-6">
+                <div class="flex justify-between text-[9px] font-black uppercase mb-1">
+                    <span>Truck Payload</span><span id="cap-text">0/500 kg</span>
+                </div>
+                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div id="cap-bar" class="bg-green-500 h-full transition-all" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="space-y-4">
+                ${available.map(load => `
+                    <div class="bg-white p-5 rounded-[2rem] shadow-md border-2 border-transparent transition-all cursor-pointer" onclick="selectBundle(this, ${load.price}, ${load.weight}, '${load.name}')">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h4 class="font-black text-slate-800">${load.name}</h4>
+                                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">${load.detail} • ${load.weight}kg</p>
+                            </div>
+                            <p class="text-xl font-black text-green-600">${formatCurrency(load.price)}</p>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+    }
+
+    function selectBundle(element, price, weight, name) {
+        const index = selectedBundles.findIndex(b => b.name === name);
+        if (index > -1) {
+            selectedBundles.splice(index, 1);
+            element.classList.remove('border-green-500', 'bg-green-50/50');
+        } else {
+            if (totalWeight + weight > MAX_CAP) return alert("Truck Overload!");
+            selectedBundles.push({ name, price, weight });
+            element.classList.add('border-green-500', 'bg-green-50/50');
+        }
+        totalWeight = selectedBundles.reduce((sum, b) => sum + b.weight, 0);
+        totalPriceUSD = selectedBundles.reduce((sum, b) => sum + b.price, 0);
+        
+        document.getElementById('cap-bar').style.width = (totalWeight/MAX_CAP)*100 + '%';
+        document.getElementById('cap-text').innerText = `${totalWeight}/${MAX_CAP} kg`;
+        document.getElementById('impact-card').classList.remove('hidden');
+        document.getElementById('graph-co2').style.height = '70%';
+        document.getElementById('graph-fuel').style.height = '40%';
+        
+        const actionBar = document.getElementById('action-bar');
+        actionBar.classList.remove('hidden');
+        document.getElementById('primary-btn').innerText = `ACCEPT ${selectedBundles.length} BUNDLES (${formatCurrency(totalPriceUSD)})`;
+    }
+
+    function handlePrimaryAction() {
+        if(currentStep === 'matches') {
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.8 } });
+            
+            // Database Handshake
+            const db = getDB();
+            selectedBundles.forEach(sel => {
+                const item = db.find(s => s.name === sel.name);
+                if(item) item.status = 'in-transit';
+            });
+            saveDB(db);
+
+            setTimeout(() => { showRouteMap(); }, 1000);
+        } else if(currentStep === 'map') {
+            showVerificationQR();
+        }
+    }
+
+    function showRouteMap() {
+        currentStep = 'map';
+        document.getElementById('action-bar').classList.remove('hidden');
+        document.getElementById('primary-btn').innerText = "ARRIVED AT UNLOAD";
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="animate-fade-in">
+                <div id="map" class="mb-4"></div>
+                <div class="bg-slate-900 p-6 rounded-[2.5rem] text-white">
+                    <p class="text-[10px] font-black uppercase text-green-400 mb-4 tracking-widest text-center italic">Live Tracking Active</p>
+                    <button onclick="document.getElementById('cam').click()" class="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs">📸 UPLOAD PICKUP PHOTO</button>
+                    <input type="file" id="cam" capture="camera" class="hidden" onchange="processPickup(this)">
+                </div>
+            </div>`;
+        
+        setTimeout(() => {
+            const map = L.map('map').setView([driverPos.lat, driverPos.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.marker([driverPos.lat, driverPos.lng]).addTo(map).bindPopup("Current Position").openPopup();
+        }, 200);
+    }
+
+    function processPickup(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const state = getState();
+                state.pickupPhoto = e.target.result;
+                state.isEscrowLocked = true;
+                state.notification = `🚚 Driver ${userProfile.name} has picked up the load!`;
+                saveState(state);
+                alert("🛡️ ESCROW LOCKED IN DATABASE");
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function showVerificationQR() {
+        currentStep = 'qrcode';
+        document.getElementById('action-bar').classList.add('hidden');
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="animate-fade-in flex flex-col items-center">
+                <div class="bg-white p-8 rounded-[3rem] shadow-xl text-center">
+                    <h3 class="font-black text-lg mb-4 italic">Proof of Unload</h3>
+                    <div id="qrcode" class="bg-slate-100 p-4 rounded-3xl mb-6"></div>
+                    <button onclick="finalizeDelivery()" class="w-full bg-green-600 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Verify & Release Payment</button>
+                </div>
+            </div>`;
+        setTimeout(() => { new QRCode(document.getElementById("qrcode"), { text: "RELEASE", width: 160, height: 160 }); }, 200);
+    }
+
+    function finalizeDelivery() {
+        const state = getState();
+        state.isPaymentReleased = true;
+        state.notification = "✅ MISSION SUCCESS: Goods Delivered & Payment Released!";
+        saveState(state);
+        
+        document.getElementById('app-content').innerHTML = `
+            <div class="p-10 text-center animate-fade-in">
+                <div class="text-6xl mb-6">💰</div>
+                <h1 class="text-4xl font-black italic">PAID!</h1>
+                <button onclick="resetDB()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">FINISH TRIP</button>
+            </div>`;
+    }
+
+    // --- 5. SHIPPER LOGIC ---
+    function renderShipperView() {
+        const content = document.getElementById('app-content');
+        const state = getState();
+        const db = getDB();
+        document.getElementById('action-bar').style.display = "none";
+
+        const notifyHtml = state.notification ? `
+            <div class="bg-blue-600 text-white p-4 rounded-2xl mb-4 animate-bounce flex justify-between items-center shadow-lg">
+                <p class="text-[9px] font-black uppercase tracking-tighter">${state.notification}</p>
+                <button onclick="clearNotify()" class="opacity-50">✕</button>
+            </div>` : '';
+
+        content.innerHTML = `
+            <div class="animate-fade-in space-y-6">
+                ${notifyHtml}
+                
+                ${!state.isEscrowLocked ? `
+                <div class="bg-white p-7 rounded-[2.5rem] shadow-xl border border-slate-100">
+                    <h2 class="text-2xl font-black italic mb-6 tracking-tighter text-blue-600">Dispatch Load</h2>
+                    <div class="space-y-4">
+                        <input type="text" id="s-type" placeholder="Item Name (e.g. Wheat)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                        <div class="flex gap-2">
+                            <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                            <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                        </div>
+                        <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none">
+                        <button onclick="broadcastLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg">BROADCAST TO DRIVERS</button>
+                    </div>
+                </div>` : `
+                <div class="bg-slate-900 p-6 rounded-[2.5rem] text-white shadow-2xl">
+                    <h3 class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4">Live Tracking</h3>
+                    ${state.pickupPhoto ? `
+                        <p class="text-[8px] text-slate-500 font-black uppercase mb-2 italic">Proof of Pickup Uploaded by Driver:</p>
+                        <img src="${state.pickupPhoto}" class="w-full h-40 object-cover rounded-2xl border-2 border-slate-700 shadow-lg mb-4">
+                    ` : '<div class="h-40 bg-slate-800 rounded-2xl flex items-center justify-center text-slate-600 italic text-xs mb-4">Waiting for Pickup Photo...</div>'}
+                    <div class="flex justify-between items-end border-t border-slate-800 pt-4">
+                        <div>
+                            <p class="text-[8px] text-slate-500 font-black uppercase">Escrow Locked</p>
+                            <p class="text-xl font-black text-green-400">${state.isPaymentReleased ? 'Released' : 'Secure'}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[8px] text-slate-500 font-black uppercase">Asset Status</p>
+                            <p class="text-[10px] font-black">${state.isPaymentReleased ? 'DELIVERED' : 'IN-TRANSIT'}</p>
+                        </div>
+                    </div>
+                </div>`}
+
+                <div class="px-2">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Active Dispatches</h3>
+                    <div class="space-y-3">
+                        ${db.map(s => `
+                            <div class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center">
+                                <div><p class="font-black text-slate-800">${s.name}</p><p class="text-[8px] font-bold text-slate-400 uppercase">${s.status}</p></div>
+                                <p class="font-black text-slate-900">${formatCurrency(s.price)}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function broadcastLoad() {
+        const type = document.getElementById('s-type').value;
+        const weight = document.getElementById('s-weight').value;
+        const amount = document.getElementById('s-price').value;
+        const dest = document.getElementById('s-dest').value;
+
+        if(!type || !weight || !amount) return alert("Fill fields!");
+
+        const db = getDB();
+        db.push({
+            id: Date.now(),
+            name: type,
+            weight: parseInt(weight),
+            price: parseInt(amount) / USD_TO_INR,
+            detail: `To: ${dest}`,
+            status: 'available'
+        });
+        saveDB(db);
+        renderShipperView();
+    }
+
+    function clearNotify() {
+        const state = getState();
+        state.notification = null;
+        saveState(state);
+        renderShipperView();
+    }
+
+    window.onload = renderProfileSetup;
+</script>
 </body>
 </html>

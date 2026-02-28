@@ -174,6 +174,182 @@ const MAX_CAP = 500; // Truck Limit
             </div>`;
     }
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RouteNova | Smart Rural Logistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+
+    <style>
+        @keyframes progress {
+    0% { width: 0%; }
+    100% { width: 100%; }
+}
+.animate-progress-fill {
+    animation: progress 3s ease-in-out forwards;
+}
+        #map { height: 300px; width: 100%; border-radius: 1.5rem; }
+        .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans antialiased text-slate-900">
+
+    <div class="app-container bg-white shadow-2xl flex flex-col min-h-screen relative">
+        
+        <header class="p-6 flex justify-between items-center border-b bg-white sticky top-0 z-50">
+            <div>
+                <h1 class="text-2xl font-black text-green-600 italic tracking-tighter">RouteNova</h1>
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Rural Micro-Logistics</p>
+            </div>
+            <div id="status-pill" class="bg-green-100 text-green-700 text-[10px] px-3 py-1 rounded-full font-bold">DRIVER ONLINE</div>
+        </header>
+
+        <div class="flex p-2 bg-slate-100 m-4 rounded-2xl">
+            <button onclick="switchView('driver')" id="tab-driver" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all bg-white shadow-sm text-green-600">Driver View</button>
+            <button onclick="switchView('shipper')" id="tab-shipper" class="flex-1 py-2 text-sm font-bold rounded-xl transition-all text-slate-500">Shipper View</button>
+        </div>
+
+        <main id="app-content" class="flex-1 p-4 pb-32">
+            </main>
+
+        <div id="action-bar" class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto p-6 bg-gradient-to-t from-white via-white to-transparent">
+            <button id="primary-btn" onclick="handlePrimaryAction()" class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl shadow-xl transition-all transform active:scale-95 flex justify-center items-center gap-2">
+                ACCEPT ALL BUNDLES ($22)
+            </button>
+        </div>
+    </div>
+<script>
+    // --- 1. GLOBAL STATE & LOCALIZATION ---
+    // --- DATABASE INITIALIZATION ---
+function initStorage() {
+    // Check if we already have data, if not, set the default
+    if (!localStorage.getItem('routeNova_shipments')) {
+        const initialLoads = [
+            { id: 402, name: "Agri-Bundle", detail: "To: Green Valley", weight: 120, price: 22, status: 'available' }
+        ];
+        localStorage.setItem('routeNova_shipments', JSON.stringify(initialLoads));
+    }
+}
+
+// Helper to get data
+const getShipments = () => JSON.parse(localStorage.getItem('routeNova_shipments'));
+
+// Helper to save data
+const saveShipments = (data) => localStorage.setItem('routeNova_shipments', JSON.stringify(data));
+
+// Call init on load
+initStorage();
+    let globalShipments = [
+    { id: 402, name: "Agri-Bundle", detail: "To: Green Valley", weight: 120, price: 22, status: 'available' }
+];
+    const USD_TO_INR = 83.50; 
+    const BUNDLE_VALUE_USD = 22; 
+    let selectedBundles = []; // Track multiple selections
+let totalWeight = 0;
+let totalPriceUSD = 0;
+const MAX_CAP = 500; // Truck Limit
+    let escrowBalance = 0;
+    let currentRole = null; 
+    let currentStep = 'matches'; 
+    let userProfile = { name: null, role: null };
+    let driverPos = { lat: 12.9716, lng: 77.5946 };
+    let destPos = { lat: 12.8500, lng: 77.6500 };
+    let isMoving = false;
+    let map = null;
+
+    function formatCurrency(amountUSD) {
+        const inrValue = (amountUSD * USD_TO_INR);
+        return inrValue.toLocaleString('en-IN', {
+            maximumFractionDigits: 0,
+            style: 'currency',
+            currency: 'INR',
+        });
+    }
+
+    // --- 2. AUTH & PROFILE SETUP ---
+    function renderProfileSetup() {
+        const content = document.getElementById('app-content');
+        document.getElementById('action-bar').style.display = "none";
+        document.querySelector('.flex.p-2.bg-slate-100').style.display = "none";
+
+        content.innerHTML = `
+            <div class="animate-fade-in p-2">
+                <h2 class="text-3xl font-black italic mb-8 tracking-tighter">RouteNova India</h2>
+                <div class="grid grid-cols-1 gap-4 mb-6">
+                    <div onclick="selectRole('driver')" id="role-driver" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                        <div class="flex justify-between items-center">
+                            <div><h3 class="font-black text-xl">Driver</h3><p class="text-[10px] text-slate-400 font-bold uppercase">Earn on Return</p></div>
+                            <span class="text-3xl">🚚</span>
+                        </div>
+                    </div>
+                    <div onclick="selectRole('shipper')" id="role-shipper" class="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] cursor-pointer transition-all">
+                        <div class="flex justify-between items-center">
+                            <div><h3 class="font-black text-xl">Shipper</h3><p class="text-[10px] text-slate-400 font-bold uppercase">Send Goods</p></div>
+                            <span class="text-3xl">📦</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="reg-form" class="hidden space-y-4 bg-slate-50 p-6 rounded-[2.5rem]">
+                    <input type="text" id="u-name" placeholder="Full Name" class="w-full p-4 rounded-2xl border-none font-bold shadow-sm outline-none">
+                    <input type="tel" id="u-phone" placeholder="Phone Number" class="w-full p-4 rounded-2xl border-none font-bold shadow-sm outline-none">
+                    <button onclick="finalizeAuth()" class="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-xl">VERIFY IDENTITY</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function selectRole(role) {
+        currentRole = role;
+        document.getElementById('reg-form').classList.remove('hidden');
+        document.getElementById('role-driver').style.borderColor = role === 'driver' ? '#16a34a' : '#f1f5f9';
+        document.getElementById('role-shipper').style.borderColor = role === 'shipper' ? '#2563eb' : '#f1f5f9';
+    }
+
+    function finalizeAuth() {
+        userProfile.name = document.getElementById('u-name').value;
+        userProfile.role = currentRole;
+        if(!userProfile.name) return alert("Enter Name");
+        
+        document.querySelector('.flex.p-2.bg-slate-100').style.display = "flex";
+        switchView(currentRole);
+    }
+
+    // --- 3. NAVIGATION LOGIC ---
+    function switchView(role) {
+        if(userProfile.role && role !== userProfile.role) {
+            alert(`Locked as ${userProfile.role.toUpperCase()}`);
+            return;
+        }
+        currentRole = role;
+        role === 'driver' ? renderDriverMatches() : renderShipperView();
+    }
+
+    // --- 4. DRIVER VIEW ---
+    function renderDriverMatches() {
+        const content = document.getElementById('app-content');
+        if(currentStep === 'map') { showRouteMap(); return; }
+        if(currentStep === 'qrcode') { showVerificationQR(); return; }
+
+        content.innerHTML = `
+            <div class="animate-fade-in p-2">
+                <div class="bg-green-600 p-6 rounded-[2rem] text-white mb-6">
+                    <p class="text-[10px] font-bold uppercase mb-2">Destination</p>
+                    <input type="text" id="dest" value="Green Valley Village" class="w-full p-4 rounded-2xl text-slate-900 font-bold mb-3">
+                    <button onclick="findLoads()" class="w-full bg-slate-900 py-4 rounded-2xl font-black text-xs">FIND LOADS</button>
+                </div>
+                <div id="results"></div>
+            </div>`;
+    }
+
  function findLoads() {
     const res = document.getElementById('results');
     const loads = [
@@ -559,53 +735,327 @@ function startBreadcrumbTracking(marker, polyline, mapInstance) {
         step++;
     }, 1500); 
 }
-async function refreshTelegramLoads() {
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbziBxhRsiYg_W1LcN4RM-xkHgJ2vigizpQs5QnPBKDdmLt-vqatUQ17eye-G0_L_bzUCw/exec"; // Paste your /exec URL here
-    const listContainer = document.getElementById('shipper-list'); // For Shipper View
-    const resultsContainer = document.getElementById('results');    // For Driver View
+    window.onload = renderProfileSetup;
+</script>
+</body>
+</html>
+// Add this helper to update the global price when a bundle is selected
+function selectBundle(element, price, weight, name) {
+    // Check if it's already selected
+    const index = selectedBundles.findIndex(b => b.name === name);
 
-    try {
-        const response = await fetch(SCRIPT_URL);
-        const data = await response.json();
+    if (index > -1) {
+        // DESELECT: If already in list, remove it
+        selectedBundles.splice(index, 1);
+        element.classList.remove('border-green-500', 'bg-green-50/30');
+        element.classList.add('border-transparent');
+    } else {
+        // SELECT: Check if weight exceeds capacity
+        if (totalWeight + weight > MAX_CAP) {
+            alert("⚠️ TRUCK OVERLOAD: This bundle is too heavy for your remaining capacity!");
+            return;
+        }
         
-        // Skip header row, take the last 3 messages
-        const latestLoads = data.slice(1).reverse().slice(0, 3); 
+        selectedBundles.push({ name, price, weight });
+        element.classList.remove('border-transparent');
+        element.classList.add('border-green-500', 'bg-green-50/30');
+    }
 
-        let html = latestLoads.map(row => `
-            <div class="bg-blue-50 border-2 border-blue-200 p-5 rounded-[2rem] shadow-sm animate-pulse">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-[8px] font-black text-blue-600 uppercase">Telegram Broadcast</p>
-                        <h3 class="font-black text-slate-800">${row[0]}</h3>
-                        <p class="text-[9px] font-bold text-slate-500 uppercase">Farmer: ${row[4] || 'Anonymous'}</p>
+    // Recalculate totals
+    totalWeight = selectedBundles.reduce((sum, b) => sum + b.weight, 0);
+    totalPriceUSD = selectedBundles.reduce((sum, b) => sum + b.price, 0);
+
+    // Update UI
+    updateCapacityUI();
+}
+function updateCapacityUI() {
+    const percentage = (totalWeight / MAX_CAP) * 100;
+    const bar = document.getElementById('cap-bar');
+    const text = document.getElementById('cap-text');
+    const actionBtn = document.getElementById('primary-btn');
+    const actionBar = document.getElementById('action-bar');
+    const impactCard = document.getElementById('impact-card');
+
+    // UI Updates
+    bar.style.width = percentage + '%';
+    text.innerText = `${totalWeight}kg / ${MAX_CAP}kg (${Math.round(percentage)}%)`;
+    bar.className = percentage > 85 ? "bg-orange-500 h-full transition-all" : "bg-green-500 h-full transition-all";
+
+    if (selectedBundles.length > 0) {
+        impactCard.classList.remove('hidden');
+        actionBar.style.display = 'block';
+        
+        // 🌿 GREEN MATH
+        // Based on average empty trip distance: 1.2L fuel saved per bundle accepted
+        const fuelSaved = (selectedBundles.length * 1.2).toFixed(1);
+        const co2Saved = (fuelSaved * 2.64).toFixed(1);
+        
+        // Update Graph Bars (Heights)
+        document.getElementById('graph-co2').style.height = Math.min(percentage + 10, 100) + '%';
+        document.getElementById('graph-fuel').style.height = Math.min((fuelSaved * 20), 100) + '%';
+        document.getElementById('graph-profit').style.height = Math.min((totalPriceUSD * 2), 100) + '%';
+
+        // Update Impact Text
+        document.getElementById('green-metrics-text').innerHTML = `
+            <div>
+                <p class="text-[8px] font-black text-green-400 uppercase">CO2 Prevented</p>
+                <p class="text-lg font-black">${co2Saved} kg</p>
+            </div>
+            <div>
+                <p class="text-[8px] font-black text-blue-400 uppercase">Fuel Waste Cut</p>
+                <p class="text-lg font-black">${fuelSaved} L</p>
+            </div>
+        `;
+
+        actionBtn.innerHTML = `ACCEPT ${selectedBundles.length} BUNDLES (${formatCurrency(totalPriceUSD)})`;
+        window.SELECTED_PRICE_USD = totalPriceUSD;
+    } else {
+        impactCard.classList.add('hidden');
+        actionBar.style.display = 'none';
+    }
+}
+    function handlePrimaryAction() {
+    if(currentStep === 'matches') {
+        // Trigger the Celebration!
+        confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#16a34a', '#2563eb', '#fbbf24']
+        });
+
+        // Sync Status: Mark selected shipments as 'in-transit' in the Global State
+        selectedBundles.forEach(selected => {
+            const ship = globalShipments.find(gs => gs.name === selected.name);
+            if(ship) ship.status = 'in-transit';
+        });
+
+        // Small delay so they see the confetti before the map opens
+        setTimeout(() => {
+            showRouteMap();
+        }, 1000);
+
+    } else if(currentStep === 'map') {
+        showVerificationQR();
+    }
+}
+function showRouteMap() {
+    currentStep = 'map';
+    const content = document.getElementById('app-content');
+    content.innerHTML = `
+        <div class="animate-fade-in">
+            <div id="map" style="height: 350px;" class="rounded-[2.5rem] mb-6 shadow-xl border-4 border-white"></div>
+            <div class="bg-slate-900 p-6 rounded-[2.5rem] text-white">
+                <p id="route-status" class="text-[10px] font-bold text-green-400 uppercase text-center mb-4 italic">Calculating optimal road path...</p>
+                <button onclick="document.getElementById('cam-1').click()" class="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs">LOCK ESCROW & START</button>
+                <input type="file" id="cam-1" capture="camera" class="hidden" onchange="previewPickup(this)">
+            </div>
+        </div>`;
+    
+    setTimeout(() => {
+        // Initialize Map
+        map = L.map('map').setView([driverPos.lat, driverPos.lng], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // REAL-TIME: Get Driver's Actual GPS
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+
+                // Create Routing Control (Actual road paths)
+                L.Routing.control({
+                    waypoints: [
+                        L.latLng(userLat, userLng), // Start at User's real location
+                        L.latLng(destPos.lat, destPos.lng) // End at Village
+                    ],
+                    lineOptions: {
+                        styles: [{ color: '#16a34a', weight: 6 }]
+                    },
+                    createMarker: function() { return null; }, // Hide default markers to use custom ones
+                    addWaypoints: false,
+                    routeWhileDragging: false
+                }).addTo(map);
+
+                // Add custom "Truck" icon at current pos
+                L.marker([userLat, userLng]).addTo(map).bindPopup("Your Truck").openPopup();
+                
+                document.getElementById('route-status').innerText = "Road Path Optimized via API";
+            });
+        }
+    }, 200);
+
+    document.getElementById('primary-btn').innerText = "ARRIVED AT UNLOAD";
+}
+
+    function previewPickup(input) {
+        if (input.files && input.files[0]) {
+            escrowBalance = BUNDLE_VALUE_USD;
+            alert(`🛡️ SMART ESCROW SECURED: ${formatCurrency(BUNDLE_VALUE_USD)} locked.`);
+        }
+    }
+
+    function showVerificationQR() {
+        currentStep = 'qrcode';
+        const content = document.getElementById('app-content');
+        content.innerHTML = `
+            <div class="flex flex-col items-center pt-6 animate-fade-in">
+                <div class="bg-white p-6 rounded-[2.5rem] shadow-xl mb-8 w-full">
+                    <p class="text-xs font-black text-center mb-4 text-slate-400 uppercase tracking-widest">Step 2: Unload Proof</p>
+                    <button onclick="document.getElementById('cam-2').click()" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px]">CAPTURE UNPACKING</button>
+                    <input type="file" id="cam-2" capture="camera" class="hidden" onchange="enableQR(this)">
+                </div>
+                <div id="qr-box" class="hidden p-6 bg-white rounded-[2.5rem] shadow-2xl border-8 border-green-50" onclick="completePayment()">
+                    <div id="qrcode"></div>
+                </div>
+            </div>`;
+        document.getElementById('action-bar').style.display = "none";
+    }
+
+    function enableQR(input) {
+        if (input.files && input.files[0]) {
+            document.getElementById('qr-box').classList.remove('hidden');
+            new QRCode(document.getElementById("qrcode"), { text: "RELEASE", width: 160, height: 160 });
+        }
+    }
+
+    function completePayment() {
+        isMoving = false;
+        document.getElementById('app-content').innerHTML = `
+            <div class="p-10 text-center animate-fade-in">
+                <div class="text-6xl mb-8">💰</div>
+                <h1 class="text-4xl font-black italic tracking-tighter uppercase">PAID ${formatCurrency(BUNDLE_VALUE_USD)}</h1>
+                <p class="text-slate-400 font-bold mt-4 uppercase text-[10px]">Instant UPI Settlement Successful</p>
+                <button onclick="location.reload()" class="mt-16 text-xs font-black border-b-2 border-slate-900 pb-1">FINISH TRIP</button>
+            </div>`;
+    }
+
+    // --- 5. SHIPPER VIEW ---
+  let pathHistory = []; // Global to store coordinates the driver has touched
+function renderShipperView() {
+    const content = document.getElementById('app-content');
+    document.getElementById('action-bar').style.display = "none";
+
+    content.innerHTML = `
+        <div class="animate-fade-in space-y-6">
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
+                <h2 class="text-xl font-black italic mb-6 tracking-tighter text-blue-600">Dispatch New Load</h2>
+                
+                <div class="space-y-4">
+                    <input type="text" id="s-name" placeholder="Type of Load (e.g., Organic Wheat)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                    
+                    <div class="flex gap-2">
+                        <input type="number" id="s-weight" placeholder="Weight (kg)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+                        <input type="number" id="s-price" placeholder="Offer (₹)" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
                     </div>
-                    <span class="text-xl">🤖</span>
+
+                    <input type="text" id="s-dest" placeholder="Destination Village" class="w-full p-4 rounded-2xl bg-slate-50 font-bold outline-none border-2 border-transparent focus:border-blue-500">
+
+                    <button onclick="broadcastLoad()" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
+                        BROADCAST TO DRIVERS
+                    </button>
                 </div>
             </div>
-        `).join('');
 
-        // Inject into whichever view is open
-        if(resultsContainer) resultsContainer.insertAdjacentHTML('afterbegin', html);
-    } catch (e) { console.log("Syncing..."); }
+            <div class="px-2">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2 text-center">Your Active Dispatches</h3>
+                <div id="shipper-list" class="space-y-3">
+                    ${globalShipments.map(s => `
+                        <div class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
+                            <div>
+                                <p class="font-black text-slate-800">${s.name}</p>
+                                <p class="text-[9px] font-bold text-blue-500 uppercase">${s.weight}kg • ${s.status.toUpperCase()}</p>
+                            </div>
+                            <p class="font-black text-slate-900">${formatCurrency(s.price)}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
 }
-function sendMessageToFarmer() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheets()[0];
-  
-  // This sends whatever is in the last row of the sheet back to the farmer
-  var lastRow = sheet.getLastRow();
-  var messageText = "🚚 Driver found! Your load: '" + sheet.getRange(lastRow, 1).getValue() + "' is being picked up.";
-  
-  // We need the Chat ID. If you didn't save it, we'll use a placeholder for the demo
-  // In a real app, you save the Chat ID in Column 6
-  var chatId = "YOUR_PERSONAL_CHAT_ID"; // You can get this from the bot updates
+function broadcastLoad() {
+    const name = document.getElementById('s-name').value;
+    const weight = parseInt(document.getElementById('s-weight').value);
+    const priceINR = parseInt(document.getElementById('s-price').value);
+    const dest = document.getElementById('s-dest').value;
 
-  var url = "https://api.telegram.org/bot" + TOKEN + "/sendMessage?chat_id=" + chatId + "&text=" + encodeURIComponent(messageText);
-  UrlFetchApp.fetch(url);
+    if(!name || !weight || !priceINR || !dest) return alert("Please fill all details!");
+
+    // 1. Get current data from LocalStorage
+    const currentShipments = getShipments();
+
+    const newLoad = {
+        id: Math.floor(Math.random() * 900) + 100,
+        name: name,
+        detail: `To: ${dest}`,
+        weight: weight,
+        price: priceINR / USD_TO_INR,
+        status: 'available'
+    };
+
+    // 2. Add to the list and SAVE back to LocalStorage
+    currentShipments.push(newLoad);
+    saveShipments(currentShipments);
+
+    alert(`🚀 ${name} has been broadcasted!`);
+    renderShipperView(); 
 }
+function startSimulatedTracking(marker, mapInstance) {
+    let step = 0;
+    const totalSteps = 100;
+    
+    const interval = setInterval(() => {
+        if (step >= totalSteps || currentRole !== 'shipper') {
+            clearInterval(interval);
+            return;
+        }
 
-// Check for new Telegram messages every 10 seconds
-setInterval(refreshTelegramLoads, 10000);
+        // Interpolate position between Bangalore and Green Valley
+        const lat = driverPos.lat + (destPos.lat - driverPos.lat) * (step / totalSteps);
+        const lng = driverPos.lng + (destPos.lng - driverPos.lng) * (step / totalSteps);
+        
+        // Update Marker Position
+        marker.setLatLng([lat, lng]);
+        
+        // Update Progress Bar & UI
+        document.getElementById('path-progress').style.width = step + '%';
+        document.getElementById('live-speed').innerText = Math.floor(Math.random() * 15 + 35) + " km/h";
+        document.getElementById('eta-text').innerText = (15 - Math.floor(step/7)) + " MINS REMAINING";
+
+        step++;
+    }, 2000); // Updates every 2 seconds
+}
+function startBreadcrumbTracking(marker, polyline, mapInstance) {
+    let step = 0;
+    const totalSteps = 60;
+    
+    const interval = setInterval(() => {
+        if (step >= totalSteps || currentRole !== 'shipper') {
+            clearInterval(interval);
+            return;
+        }
+
+        // Calculate next GPS ping
+        const lat = driverPos.lat + (destPos.lat - driverPos.lat) * (step / totalSteps);
+        const lng = driverPos.lng + (destPos.lng - driverPos.lng) * (step / totalSteps);
+        const newPos = [lat, lng];
+
+        // Update Data
+        pathHistory.push(newPos);
+        marker.setLatLng(newPos);
+        polyline.setLatLngs(pathHistory); // This draws the "line moved"
+        
+        // Auto-center map on driver
+        mapInstance.panTo(newPos);
+
+        // UI Metrics
+        const km = (step * 0.2).toFixed(1);
+        document.getElementById('dist-covered').innerText = `${km} km`;
+
+        step++;
+    }, 1500); 
+}
     window.onload = renderProfileSetup;
 </script>
 </body>
