@@ -146,3 +146,5 @@ export async function recordDeliveryOutcomeAsync(outcomeData) {
   return { ...fallback, isBackendConnected: false };
 }
 
+export { recordDeliveryOutcomeAsync as recordOutcomeAsync };
+

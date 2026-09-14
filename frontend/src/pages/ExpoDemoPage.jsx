@@ -1,533 +1,408 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
-import RouteMap from '../components/RouteMap';
 import {
-  Sparkles,
   Package,
-  Brain,
+  Scan,
   AlertTriangle,
   Search,
-  Share2,
-  Scale,
-  CheckCircle2,
   Truck,
-  RotateCcw,
-  ChevronRight,
-  ChevronLeft,
-  ArrowRight,
-  Info,
-  ShieldCheck,
+  Scale,
   Zap,
-  TrendingDown,
-  Layers,
+  CheckCircle2,
+  RotateCcw,
+  Play,
+  Pause,
+  ArrowRight,
+  ShieldAlert,
+  Sliders,
+  Sparkles,
+  Info,
 } from 'lucide-react';
 
+import VisualEvidenceOverlay from '../components/expo/VisualEvidenceOverlay';
+import RoadEvidenceInput from '../components/expo/RoadEvidenceInput';
+import RiskEvidencePanel from '../components/expo/RiskEvidencePanel';
+import VehicleCompatibilityVisualizer from '../components/expo/VehicleCompatibilityVisualizer';
+import BeforeAfterDecision from '../components/expo/BeforeAfterDecision';
+import ImprovementMetricsPanel from '../components/expo/ImprovementMetricsPanel';
+import DeliverySimulationController from '../components/expo/DeliverySimulationController';
+import OutcomeLearningLoop from '../components/expo/OutcomeLearningLoop';
 import DemoResetModal from '../components/DemoResetModal';
 
-const DEMO_STEPS = [
-  { id: 1, title: 'ORDER', icon: Package, label: '01 ORDER' },
-  { id: 2, title: 'ANALYZE', icon: Brain, label: '02 ANALYZE' },
-  { id: 3, title: 'IDENTIFY RISK', icon: AlertTriangle, label: '03 RISK' },
-  { id: 4, title: 'WHY?', icon: Search, label: '04 WHY?' },
-  { id: 5, title: 'FIND POOL', icon: Share2, label: '05 POOL' },
-  { id: 6, title: 'COMPARE', icon: Scale, label: '06 COMPARE' },
-  { id: 7, title: 'ROUTENOVA DECIDES', icon: Zap, label: '07 DECIDE' },
-  { id: 8, title: 'DISPATCH', icon: Truck, label: '08 DISPATCH' },
-  { id: 9, title: 'SUCCESS', icon: CheckCircle2, label: '09 SUCCESS' },
-  { id: 10, title: 'LEARN', icon: RotateCcw, label: '10 LEARN' },
+import { DEMO_ROAD_CASES, getDemoRoadCaseById } from '../data/demoRoadCases';
+import { analyzeRoadEvidence } from '../services/roadVisionEngine';
+import { evaluateDeliveryPlan } from '../services/reliabilityEngine';
+import { calculateExpectedOperationalLoss } from '../services/lossEngine';
+import { evaluateAlternativePlans } from '../services/planEngine';
+import { SHIPMENTS, VEHICLES, DESTINATIONS } from '../data/index';
+
+const STAGES = [
+  { id: 1, title: 'DELIVERY', icon: Package, label: '01 DELIVERY' },
+  { id: 2, title: 'ROAD SCAN', icon: Scan, label: '02 SCAN' },
+  { id: 3, title: 'DETECTION', icon: AlertTriangle, label: '03 DETECT' },
+  { id: 4, title: 'RISK EXPLAINED', icon: Search, label: '04 EXPLAIN' },
+  { id: 5, title: 'VEHICLE CHECK', icon: Truck, label: '05 VEHICLES' },
+  { id: 6, title: 'OPTIMIZATION', icon: Scale, label: '06 OPTIMIZE' },
+  { id: 7, title: 'BEFORE / AFTER', icon: Zap, label: '07 DECIDE' },
+  { id: 8, title: 'SIMULATION', icon: Play, label: '08 SIMULATE' },
+  { id: 9, title: 'OUTCOME', icon: CheckCircle2, label: '09 OUTCOME' },
+  { id: 10, title: 'LEARNING LOOP', icon: RotateCcw, label: '10 LEARN' },
 ];
 
 export default function ExpoDemoPage() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
-  const [showTechDetails, setShowTechDetails] = useState(false);
+  const [isAutoDemo, setIsAutoDemo] = useState(false);
   const [resetModalOpen, setResetModalOpen] = useState(false);
 
-  const handleNext = () => {
-    if (currentStep < 10) setCurrentStep(currentStep + 1);
+  // Selected Road Evidence State
+  const [selectedCaseId, setSelectedCaseId] = useState('pothole-road');
+  const [userImageSrc, setUserImageSrc] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [roadAnalysis, setRoadAnalysis] = useState(null);
+  const [isSimulatingProblem, setIsSimulatingProblem] = useState(false);
+
+  // Baseline Demo Order & Vehicles
+  const demoShipment = SHIPMENTS[0] || {
+    id: 'RN-2026-8801',
+    weightKg: 120,
+    itemType: 'Produce & Seeds',
+    destination: 'Rampuram Village',
+  };
+  const baselineVehicle = VEHICLES[0] || {
+    id: 'VEH-01',
+    name: 'Standard 2WD Delivery Van',
+    type: 'van',
+    groundClearanceMm: 160,
+    drivetrain: '2WD',
+    capacityKg: 600,
   };
 
-  const handlePrev = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+  // Run Road Vision Analysis whenever selected scenario changes
+  useEffect(() => {
+    let isMounted = true;
+    async function runAnalysis() {
+      setIsScanning(true);
+      const caseInput = userImageSrc ? { name: 'Uploaded Road Image', src: userImageSrc } : selectedCaseId;
+      const res = await analyzeRoadEvidence(caseInput);
+      if (isMounted) {
+        setRoadAnalysis(res);
+        setIsScanning(false);
+      }
+    }
+    runAnalysis();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCaseId, userImageSrc]);
+
+  // DYNAMIC COMPUTATIONS FROM ROUTENOVA ENGINES
+  const activeDestination = {
+    ...DESTINATIONS[0],
+    id: 'DEST-01',
+    name: 'Rampuram Village',
+    roadAccessScore: roadAnalysis?.accessibilityScore ?? 45,
+    roadSurface: roadAnalysis?.roadSurface ?? 'unpaved_mud',
+    roadWidthCategory: roadAnalysis?.roadWidthCategory ?? 'narrow',
+    roadWidth: roadAnalysis?.roadWidth ?? 2.4,
   };
 
-  const handleRestart = () => {
-    setCurrentStep(1);
-    setShowTechDetails(false);
+  // 1. Reliability Engine Calculation
+  const reliabilityEval = evaluateDeliveryPlan({
+    destination: activeDestination,
+    vehicle: baselineVehicle,
+    shipment: demoShipment,
+  });
+
+  // 2. Expected Loss Engine Calculation
+  const baselineLossEval = calculateExpectedOperationalLoss({
+    reliabilityScore: reliabilityEval.reliabilityScore,
+    vehicle: baselineVehicle,
+    shipment: demoShipment,
+    destination: activeDestination,
+  });
+
+  // 3. Alternative Plan Engine Calculation
+  const planEval = evaluateAlternativePlans({
+    shipment: demoShipment,
+    destination: activeDestination,
+    currentVehicle: baselineVehicle,
+    availableVehicles: VEHICLES,
+  });
+
+  const recommendedPlan = planEval?.recommendedPlan || planEval?.evaluatedPlans?.[0] || {
+    vehicle: VEHICLES[2] || baselineVehicle,
+    reliabilityScore: 94,
+    expectedOperationalLoss: 78,
+    riskLevel: 'LOW',
+  };
+
+  // AUTOMATIC DEMO MODE TIMER (60-90 seconds flow)
+  useEffect(() => {
+    if (!isAutoDemo) return;
+    const timer = setInterval(() => {
+      setCurrentStep((prev) => {
+        if (prev >= 10) {
+          setIsAutoDemo(false);
+          return 10;
+        }
+        return prev + 1;
+      });
+    }, 4500); // 4.5 sec per stage (~45 seconds total demo)
+
+    return () => clearInterval(timer);
+  }, [isAutoDemo]);
+
+  // Toggle Road Problem Simulation
+  const handleToggleProblem = () => {
+    if (!isSimulatingProblem) {
+      setIsSimulatingProblem(true);
+      setSelectedCaseId('combined-risk-road');
+      setCurrentStep(3); // jump to hazard detection
+    } else {
+      setIsSimulatingProblem(false);
+      setSelectedCaseId('good-road');
+      setCurrentStep(1);
+    }
   };
 
   return (
     <div className="space-y-6 animate-fade-in pb-16 font-sans">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* HEADER BAR */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <PageHeader
-          title="RouteNova Expo Presentation Demo"
-          description="Interactive 2-minute visual walkthrough of RouteNova's rural failure-forecasting decision engine"
-          badge="✨ EXPO PRESENTATION MODE"
+          title="RouteNova Expo Interactive Demonstration"
+          description="Live visual demonstration of evidence-based rural failure prediction and pre-dispatch optimization"
+          badge="✨ EXPO DEMO EXPERIENCE"
         />
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setResetModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-mono text-xs font-bold transition flex items-center space-x-2"
+            onClick={() => setIsAutoDemo(!isAutoDemo)}
+            className={`px-4 py-2.5 rounded-xl border font-mono text-xs font-bold transition flex items-center space-x-2 ${
+              isAutoDemo
+                ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-lg animate-pulse'
+                : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-600/20'
+            }`}
           >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-            <span>Reset Demo Data</span>
+            {isAutoDemo ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+            <span>{isAutoDemo ? 'PAUSE DEMO' : 'START AUTO DEMO'}</span>
           </button>
 
           <button
-            onClick={handleRestart}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xs font-bold transition flex items-center space-x-2"
+            onClick={() => setResetModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-300 font-mono text-xs font-bold transition flex items-center space-x-1.5"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Restart Demo</span>
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+            <span>Reset</span>
           </button>
         </div>
       </div>
 
-      {/* PROMINENT NOVELTY STATEMENT BANNER */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-cyan-950/90 via-slate-900 to-indigo-950/90 border border-cyan-500/40 text-center space-y-2 shadow-2xl relative overflow-hidden">
+      {/* CORE NOVELTY STATEMENT BANNER */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-cyan-950/90 via-slate-900 to-indigo-950/90 border border-cyan-500/40 text-center space-y-2 shadow-2xl relative overflow-hidden">
         <div className="flex items-center justify-center space-x-2 text-cyan-400 text-xs font-mono font-bold uppercase tracking-wider">
           <Sparkles className="w-4 h-4 fill-current" />
-          <span>Core RouteNova Innovation Statement</span>
+          <span>ROUTENOVA CORE PRODUCT INNOVATION</span>
         </div>
-        <blockquote className="text-base sm:text-lg font-bold font-mono text-white max-w-3xl mx-auto leading-relaxed">
-          “RouteNova doesn't simply find a route. It decides whether the delivery plan is likely to succeed — and chooses a better plan when necessary.”
+        <blockquote className="text-base sm:text-xl font-extrabold font-mono text-white max-w-4xl mx-auto leading-snug">
+          “RouteNova doesn't just predict delivery risk. It shows the evidence behind the risk and changes the delivery plan to reduce that risk.”
         </blockquote>
       </div>
 
-      {/* VISUAL CLICKABLE 10-STEP PROGRESS BAR */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 shadow-xl overflow-x-auto">
-        <div className="flex items-center justify-between min-w-[760px] gap-2 font-mono text-xs">
-          {DEMO_STEPS.map((step) => {
-            const Icon = step.icon;
-            const isActive = currentStep === step.id;
-            const isDone = currentStep > step.id;
+      {/* VISUAL 10-STEP PROGRESS TIMELINE */}
+      <div className="glass-panel p-3.5 rounded-2xl border border-slate-800 shadow-xl overflow-x-auto">
+        <div className="flex items-center justify-between min-w-[840px] gap-2 font-mono text-xs">
+          {STAGES.map((stg) => {
+            const Icon = stg.icon;
+            const isActive = currentStep === stg.id;
+            const isDone = currentStep > stg.id;
 
             return (
               <button
-                key={step.id}
-                onClick={() => setCurrentStep(step.id)}
+                key={stg.id}
+                onClick={() => setCurrentStep(stg.id)}
                 className={`flex-1 p-2.5 rounded-xl border flex flex-col items-center justify-center space-y-1 transition-all ${
                   isActive
-                    ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-500/50 scale-105'
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-lg scale-105 ring-1 ring-cyan-500/50'
                     : isDone
-                    ? 'bg-slate-900 border-slate-700 text-emerald-400 hover:border-slate-600'
+                    ? 'bg-slate-900 border-slate-800 text-emerald-400 hover:border-slate-700'
                     : 'bg-slate-950/60 border-slate-850 text-slate-500 hover:text-slate-300'
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400 animate-pulse' : isDone ? 'text-emerald-400' : 'text-slate-500'}`} />
-                <span className="text-[10px] font-bold tracking-wider">{step.label}</span>
+                <span className="text-[10px] font-bold tracking-wider">{stg.label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* STEP CONTENT CONTAINER */}
-      <div className="glass-panel p-6 sm:p-8 rounded-2xl border border-cyan-500/30 space-y-6 shadow-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/95 min-h-[420px] flex flex-col justify-between">
-        
-        {/* STEP 01: ORDER */}
-        {currentStep === 1 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center space-x-3 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <Package className="w-5 h-5" />
-              <span>STEP 01 — NEW SHIPMENT ORDER</span>
-            </div>
+      {/* MAIN EXPO CONTENT LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT COLUMN (COL-5): ROAD EVIDENCE VISUAL OVERLAY & INPUT SELECTOR */}
+        <div className="lg:col-span-5 space-y-5">
+          <VisualEvidenceOverlay
+            roadData={roadAnalysis}
+            isScanning={isScanning}
+            userImageSrc={userImageSrc}
+          />
 
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-extrabold font-mono text-white">
-                “120 kg agricultural produce needs delivery.”
-              </h2>
-              <p className="text-slate-300 text-sm font-sans">
-                Destination: <strong>Rampuram Village</strong>. Initial assigned vehicle: <strong>Standard 2WD Delivery Van</strong>.
-              </p>
-            </div>
+          <RoadEvidenceInput
+            selectedCaseId={selectedCaseId}
+            onSelectCase={(id) => {
+              setSelectedCaseId(id);
+              setUserImageSrc(null);
+            }}
+            onImageUpload={(data) => {
+              setUserImageSrc(data.src);
+            }}
+            isSimulatingProblem={isSimulatingProblem}
+            onToggleProblemSimulation={handleToggleProblem}
+          />
+        </div>
 
-            {/* Visual Specs Card */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-slate-500 uppercase block text-[10px]">Payload Weight</span>
-                <span className="text-cyan-400 font-extrabold text-xl">120 kg</span>
+        {/* RIGHT COLUMN (COL-7): STAGE-SPECIFIC ROUTENOVA DECISION WORKFLOW */}
+        <div className="lg:col-span-7 space-y-5">
+          {/* STAGE 01 & 02: DELIVERY & SCAN */}
+          {(currentStep === 1 || currentStep === 2) && (
+            <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-950/90 space-y-5 shadow-2xl animate-fade-in font-sans">
+              <div className="flex items-center space-x-3 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider">
+                <Package className="w-5 h-5" />
+                <span>STEP 01/02 — NEW RURAL SHIPMENT & ROAD SCAN</span>
               </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-slate-500 uppercase block text-[10px]">Target Location</span>
-                <span className="text-white font-extrabold text-xl">Rampuram Village</span>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                <span className="text-slate-500 uppercase block text-[10px]">Initial Selected Vehicle</span>
-                <span className="text-amber-400 font-extrabold text-xl">🚐 Standard 2WD Van</span>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* STEP 02: ANALYZE */}
-        {currentStep === 2 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center space-x-3 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <Brain className="w-5 h-5 animate-spin" />
-              <span>STEP 02 — PRE-DISPATCH INTELLIGENCE EVALUATION</span>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-extrabold font-mono text-white">
-                “RouteNova checks the delivery.”
-              </h2>
-              <p className="text-slate-300 text-sm font-sans">
-                Evaluating 6-dimensional failure parameters: ground clearance mm, road surface mud rutting, bridge weight limits, and cell coverage.
-              </p>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 font-mono text-xs">
-              <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                <span className="text-slate-400">Road Access & Ground Clearance Check...</span>
-                <span className="text-cyan-400 font-bold animate-pulse">Evaluating 35/100...</span>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-extrabold font-mono text-white">
+                  “120 kg produce scheduled for Rampuram Village.”
+                </h2>
+                <p className="text-slate-300 text-sm">
+                  Initial default dispatch assignment: <strong>Standard 2WD Delivery Van</strong>. RouteNova is scanning the final rural segment road conditions.
+                </p>
               </div>
-              <div className="flex items-center justify-between border-b border-slate-850 pb-2">
-                <span className="text-slate-400">Address Landmark & Cellular Coverage Check...</span>
-                <span className="text-cyan-400 font-bold animate-pulse">Evaluating 70/100...</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Historical Axle & Mud Rut Failure Risk...</span>
-                <span className="text-rose-400 font-bold animate-pulse">Calculating Failure Probability...</span>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* STEP 03: IDENTIFY RISK */}
-        {currentStep === 3 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center space-x-3 text-rose-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <AlertTriangle className="w-5 h-5" />
-              <span>STEP 03 — IDENTIFY DELIVERY RISK</span>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/40 space-y-3">
-              <h2 className="text-xl sm:text-2xl font-extrabold font-mono text-white flex items-center gap-2">
-                <AlertTriangle className="w-6 h-6 text-rose-400 shrink-0" />
-                “⚠️ This delivery may fail because the selected van is not well suited to the final rural road.”
-              </h2>
-            </div>
-
-            {/* Risk Summary Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs text-center">
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 block uppercase text-[10px]">Road Access</span>
-                <span className="text-rose-400 font-extrabold text-sm">Difficult (35)</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 block uppercase text-[10px]">Vehicle Compatibility</span>
-                <span className="text-rose-400 font-extrabold text-sm">Poor (2WD)</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 block uppercase text-[10px]">Address Confidence</span>
-                <span className="text-amber-400 font-extrabold text-sm">Medium (70)</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-500 block uppercase text-[10px]">Reliability Score</span>
-                <span className="text-rose-400 font-extrabold text-sm">46 / 100</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 col-span-2 sm:col-span-1">
-                <span className="text-slate-500 block uppercase text-[10px]">Risk State</span>
-                <span className="text-rose-400 font-extrabold text-sm uppercase">HIGH RISK</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 04: WHY? */}
-        {currentStep === 4 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center space-x-3 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <Search className="w-5 h-5" />
-              <span>STEP 04 — WHY DOES THIS RISK EXIST?</span>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xl sm:text-2xl font-bold font-mono text-white">
-                “Selected van has poor compatibility with the final rural segment.”
-              </h2>
-            </div>
-
-            {/* Visual Cause Breakdown Diagram */}
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center font-mono text-xs">
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 w-full">
-                  <span className="text-amber-400 font-bold block text-sm">🚐 2WD Standard Van</span>
-                  <span className="text-[10px] text-slate-500">Low ground clearance (160mm)</span>
+              {/* Order Specs Grid */}
+              <div className="grid grid-cols-3 gap-3 font-mono text-xs">
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-850">
+                  <span className="text-slate-500 text-[10px] block uppercase">Payload Weight</span>
+                  <span className="text-cyan-400 font-extrabold text-lg">120 kg</span>
                 </div>
-                <ArrowRight className="w-6 h-6 text-slate-500 shrink-0 rotate-90 sm:rotate-0" />
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 w-full">
-                  <span className="text-rose-400 font-bold block text-sm">🛣️ Narrow Final 2.1km</span>
-                  <span className="text-[10px] text-slate-500">Unpaved mud & rutting</span>
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-850">
+                  <span className="text-slate-500 text-[10px] block uppercase">Destination</span>
+                  <span className="text-white font-extrabold text-base">Rampuram Village</span>
                 </div>
-                <ArrowRight className="w-6 h-6 text-slate-500 shrink-0 rotate-90 sm:rotate-0" />
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 w-full">
-                  <span className="text-rose-400 font-bold block text-sm">⚠️ High Failure Risk</span>
-                  <span className="text-[10px] text-slate-500">$420 expected operational loss</span>
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-850">
+                  <span className="text-slate-500 text-[10px] block uppercase">Initial Vehicle</span>
+                  <span className="text-amber-400 font-extrabold text-xs">🚐 Standard 2WD Van</span>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* STEP 05: FIND POOL */}
-        {currentStep === 5 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center space-x-3 text-indigo-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <Share2 className="w-5 h-5" />
-              <span>STEP 05 — MICROPOOL CONSOLIDATION</span>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xl sm:text-2xl font-extrabold font-mono text-white">
-                “RouteNova finds compatible shipments along the corridor.”
-              </h2>
-              <p className="text-slate-300 text-sm font-sans">
-                Consolidates 3 compatible small shipments onto a high-clearance 4x4 Mini Truck.
-              </p>
-            </div>
-
-            {/* Load Sum Diagram */}
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 font-mono text-xs">
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
-                  <span className="text-cyan-400 font-bold block text-sm">120 kg</span>
-                  <span className="text-[10px] text-slate-400">Produce Order</span>
-                </div>
-                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
-                  <span className="text-indigo-400 font-bold block text-sm">+ 80 kg</span>
-                  <span className="text-[10px] text-slate-400">Medical Parcel</span>
-                </div>
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-                  <span className="text-emerald-400 font-bold block text-sm">+ 60 kg</span>
-                  <span className="text-[10px] text-slate-400">Hardware Goods</span>
-                </div>
-              </div>
-
-              {/* Total Combined Capacity */}
-              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-center space-y-1">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-400">Combined Vehicle Load:</span>
-                  <span className="text-emerald-400 font-bold">260 / 500 kg (52% capacity utilization)</span>
-                </div>
-                <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-slate-800">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '52%' }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 06: COMPARE */}
-        {currentStep === 6 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center space-x-3 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <Scale className="w-5 h-5" />
-              <span>STEP 06 — COMPARE DELIVERY OPTIONS</span>
-            </div>
-
-            {/* 3 Large Visual Comparison Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
-              {/* Option A */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-rose-500/40 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-rose-400 text-sm">🚐 Van Alone</span>
-                  <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded border border-rose-500/40">HIGH RISK</span>
-                </div>
-                <div className="space-y-1 text-slate-300">
-                  <div className="flex justify-between"><span>Reliability:</span><strong className="text-rose-400">46%</strong></div>
-                  <div className="flex justify-between"><span>Trip Cost:</span><strong>$85</strong></div>
-                  <div className="flex justify-between"><span>Expected Loss:</span><strong className="text-rose-400">$420</strong></div>
-                  <div className="flex justify-between"><span>Utilization:</span><strong>24%</strong></div>
-                </div>
-              </div>
-
-              {/* Option B */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-200 text-sm">🏍️ Bike Express</span>
-                  <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-500/40">MODERATE</span>
-                </div>
-                <div className="space-y-1 text-slate-300">
-                  <div className="flex justify-between"><span>Reliability:</span><strong className="text-cyan-400">82%</strong></div>
-                  <div className="flex justify-between"><span>Trip Cost:</span><strong>$65</strong></div>
-                  <div className="flex justify-between"><span>Expected Loss:</span><strong className="text-cyan-400">$145</strong></div>
-                  <div className="flex justify-between"><span>Utilization:</span><strong>65%</strong></div>
-                </div>
-              </div>
-
-              {/* Option C */}
-              <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/50 space-y-3 shadow-xl">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-emerald-400 text-sm">🤝 Pooled 4x4</span>
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/40">RECOMMENDED</span>
-                </div>
-                <div className="space-y-1 text-slate-200">
-                  <div className="flex justify-between"><span>Reliability:</span><strong className="text-emerald-400">94%</strong></div>
-                  <div className="flex justify-between"><span>Trip Cost:</span><strong>$55</strong></div>
-                  <div className="flex justify-between"><span>Expected Loss:</span><strong className="text-emerald-400">$78</strong></div>
-                  <div className="flex justify-between"><span>Utilization:</span><strong className="text-emerald-400">86%</strong></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Toggle Details button */}
-            <div className="text-center pt-1">
-              <button
-                onClick={() => setShowTechDetails(!showTechDetails)}
-                className="text-xs font-mono text-cyan-400 hover:underline flex items-center space-x-1 mx-auto"
-              >
-                <Info className="w-3.5 h-3.5" />
-                <span>{showTechDetails ? 'Hide Technical Loss Details' : 'View Details (Loss Math)'}</span>
-              </button>
-
-              {showTechDetails && (
-                <div className="mt-3 p-4 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 text-left space-y-1 max-w-md mx-auto animate-fade-in">
-                  <p>Option A Loss: P(Fail=0.54) × $700 + $420 = $420 expected loss</p>
-                  <p>Option C Loss: P(Fail=0.06) × $700 + $36 = $78 expected loss</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* STEP 07: ROUTENOVA DECIDES (HERO MOMENT) */}
-        {currentStep === 7 && (
-          <div className="space-y-6 text-center animate-fade-in my-auto py-4">
-            <div className="w-16 h-16 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center mx-auto text-cyan-400 animate-pulse">
-              <Zap className="w-8 h-8 fill-current" />
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-xs font-mono text-cyan-400 font-bold uppercase tracking-widest block">
-                HERO DECISION MOMENT
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-extrabold font-mono text-white tracking-tight">
-                “ROUTENOVA RECOMMENDS”
-              </h2>
-              <p className="text-lg font-bold text-emerald-400 font-mono">
-                🤝 Option 3: Pooled 4x4 Mini Truck Dispatch
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 max-w-lg mx-auto text-xs font-mono text-slate-300">
-              “Best valid plan with the lowest expected operational loss ($78 vs $420 baseline).”
-            </div>
-          </div>
-        )}
-
-        {/* STEP 08: DISPATCH */}
-        {currentStep === 8 && (
-          <div className="space-y-6 text-center animate-fade-in my-auto py-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400">
-              <Truck className="w-8 h-8" />
-            </div>
-
-            <div className="space-y-2 max-w-md mx-auto">
-              <h2 className="text-2xl font-bold font-mono text-white">Ready for Dispatch</h2>
-              <p className="text-xs text-slate-400 font-mono">
-                Assigning Tata Ace 4x4 Mini Truck to Rampuram Corridor. Driver Ramesh notified.
-              </p>
-            </div>
-
-            {/* LARGE DISPATCH BUTTON */}
-            <div className="pt-2">
-              <button
-                onClick={handleNext}
-                className="py-5 px-10 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-mono font-extrabold text-base shadow-2xl shadow-emerald-500/30 flex items-center justify-center space-x-3 mx-auto transition active:scale-[0.98]"
-              >
-                <CheckCircle2 className="w-6 h-6" />
-                <span>ACCEPT & DISPATCH</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 09: SUCCESS */}
-        {currentStep === 9 && (
-          <div className="space-y-6 text-center animate-fade-in my-auto py-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-extrabold font-mono text-white">
-                “Delivery successfully dispatched.”
-              </h2>
-              <p className="text-sm font-mono text-cyan-400">
-                RouteNova will continue learning from the outcome.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 10: LEARN */}
-        {currentStep === 10 && (
-          <div className="space-y-6 text-center animate-fade-in">
-            <div className="flex items-center justify-center space-x-2 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider">
-              <RotateCcw className="w-5 h-5" />
-              <span>STEP 10 — CLOSED-LOOP LEARNING PIPELINE</span>
-            </div>
-
-            <div className="space-y-1 max-w-lg mx-auto">
-              <h2 className="text-xl sm:text-2xl font-extrabold font-mono text-white">
-                “Continuous Learning Feedback Loop”
-              </h2>
-              <p className="text-xs text-slate-400 font-mono">
-                Driver field outcomes update operational evidence for future decision cycles.
-              </p>
-            </div>
-
-            {/* Visual Learning Loop Diagram */}
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800">
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center font-mono text-[11px]">
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-cyan-300 font-bold">1. Analyze</div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-indigo-300 font-bold">2. Decide</div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-300 font-bold">3. Dispatch</div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-emerald-300 font-bold">4. Outcome</div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-rose-300 font-bold">5. Evidence</div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-cyan-300 font-bold">6. Better Decisions</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* FOOTER STEP NAVIGATION BUTTONS */}
-        <div className="flex items-center justify-between pt-6 border-t border-slate-800 font-mono text-xs">
-          <button
-            disabled={currentStep === 1}
-            onClick={handlePrev}
-            className="px-4 py-2.5 rounded-xl border border-slate-800 text-slate-300 hover:bg-slate-800 disabled:opacity-40 transition flex items-center space-x-1.5"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>Previous Step</span>
-          </button>
-
-          <div className="text-slate-500 font-bold text-xs">
-            Step {currentStep} of 10
-          </div>
-
-          {currentStep < 10 ? (
-            <button
-              onClick={handleNext}
-              className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition flex items-center space-x-1.5 shadow-lg shadow-cyan-600/20"
-            >
-              <span>Next Step</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition flex items-center space-x-1.5 shadow-lg shadow-emerald-600/20"
-            >
-              <span>Go to Control Dashboard</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
           )}
+
+          {/* STAGE 03 & 04: HAZARD DETECTION & RISK EXPLANATION */}
+          {(currentStep === 3 || currentStep === 4) && (
+            <RiskEvidencePanel
+              roadData={roadAnalysis}
+              currentVehicle={baselineVehicle}
+              reliabilityEval={reliabilityEval}
+              lossEval={baselineLossEval}
+            />
+          )}
+
+          {/* STAGE 05: VEHICLE COMPATIBILITY CHECK */}
+          {currentStep === 5 && (
+            <VehicleCompatibilityVisualizer
+              evaluatedPlans={planEval?.evaluatedPlans || []}
+              currentVehicle={baselineVehicle}
+              recommendedPlan={recommendedPlan}
+              isAnalyzing={isScanning}
+            />
+          )}
+
+          {/* STAGE 06: PLAN OPTIMIZATION */}
+          {currentStep === 6 && (
+            <div className="space-y-4 animate-fade-in">
+              <VehicleCompatibilityVisualizer
+                evaluatedPlans={planEval?.evaluatedPlans || []}
+                currentVehicle={baselineVehicle}
+                recommendedPlan={recommendedPlan}
+                isAnalyzing={isScanning}
+              />
+              <ImprovementMetricsPanel
+                currentPlan={planEval?.currentPlan}
+                recommendedPlan={recommendedPlan}
+              />
+            </div>
+          )}
+
+          {/* STAGE 07: THE KILLER BEFORE/AFTER DECISION MOMENT */}
+          {currentStep === 7 && (
+            <div className="space-y-5 animate-fade-in">
+              <BeforeAfterDecision
+                currentPlan={planEval?.currentPlan || { reliabilityScore: 45, expectedOperationalLoss: 420, primaryRisk: 'Vehicle mismatch' }}
+                recommendedPlan={recommendedPlan}
+                isAnalyzing={isScanning}
+              />
+              <ImprovementMetricsPanel
+                currentPlan={planEval?.currentPlan}
+                recommendedPlan={recommendedPlan}
+              />
+            </div>
+          )}
+
+          {/* STAGE 08: DELIVERY SIMULATION */}
+          {currentStep === 8 && (
+            <DeliverySimulationController
+              deliveryId={demoShipment.id}
+              vehicleName={recommendedPlan?.vehicle?.name}
+              destinationName={activeDestination.name}
+              onComplete={() => setCurrentStep(9)}
+            />
+          )}
+
+          {/* STAGE 09 & 10: OUTCOME & LEARNING LOOP */}
+          {(currentStep === 9 || currentStep === 10) && (
+            <OutcomeLearningLoop
+              destinationId={activeDestination.id}
+              vehicleId={recommendedPlan?.vehicle?.id}
+              shipmentId={demoShipment.id}
+              onRecorded={() => setCurrentStep(10)}
+            />
+          )}
+
+          {/* STEP CONTROLS FOOTER */}
+          <div className="p-4 rounded-2xl glass-panel border border-slate-800 flex items-center justify-between font-mono text-xs">
+            <button
+              disabled={currentStep === 1}
+              onClick={() => setCurrentStep(currentStep - 1)}
+              className="px-4 py-2.5 rounded-xl border border-slate-850 text-slate-300 hover:bg-slate-800 disabled:opacity-40 transition"
+            >
+              ← Previous Stage
+            </button>
+
+            <span className="text-slate-500 font-bold text-xs">
+              Stage {currentStep} of 10
+            </span>
+
+            {currentStep < 10 ? (
+              <button
+                onClick={() => setCurrentStep(currentStep + 1)}
+                className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition flex items-center space-x-1.5 shadow-lg shadow-cyan-600/20"
+              >
+                <span>Next Stage</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition flex items-center space-x-1.5 shadow-lg shadow-emerald-600/20"
+              >
+                <span>Go to Main Control Center</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -535,7 +410,7 @@ export default function ExpoDemoPage() {
         isOpen={resetModalOpen}
         onClose={() => setResetModalOpen(false)}
         onSuccess={() => {
-          handleRestart();
+          setCurrentStep(1);
           window.location.reload();
         }}
       />

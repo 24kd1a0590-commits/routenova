@@ -40,6 +40,7 @@ function AppRoutes() {
           }
         />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/expo" element={<ExpoDemoPage />} />
         <Route path="/demo" element={<ExpoDemoPage />} />
         <Route path="/driver" element={<DriverDashboard />} />
         <Route path="/deliveries" element={<DeliveriesList />} />

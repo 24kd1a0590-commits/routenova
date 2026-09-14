@@ -25,14 +25,14 @@ export default function Sidebar({ isOpen, onClose }) {
 
   if (uRole === 'DRIVER') {
     navItems = [
-      { label: 'Expo Presentation', icon: Sparkles, path: '/demo', badge: 'Demo' },
+      { label: 'Expo Presentation', icon: Sparkles, path: '/expo', badge: 'Expo' },
       { label: 'Assigned Routes', icon: Navigation, path: '/driver', highlight: true },
       { label: 'Delivery History', icon: Truck, path: '/deliveries' },
       { label: 'Report Outcome', icon: FileCheck2, path: '/outcomes' },
     ];
   } else if (uRole === 'SHIPPER') {
     navItems = [
-      { label: 'Expo Presentation', icon: Sparkles, path: '/demo', badge: 'Demo' },
+      { label: 'Expo Presentation', icon: Sparkles, path: '/expo', badge: 'Expo' },
       { label: 'Create Delivery', icon: PlusCircle, path: '/deliveries/new', highlight: true },
       { label: 'Track Shipments', icon: Truck, path: '/deliveries' },
       { label: 'Destination Intelligence', icon: MapPin, path: '/destinations' },
@@ -41,7 +41,7 @@ export default function Sidebar({ isOpen, onClose }) {
   } else if (uRole === 'FLEET_MANAGER') {
     navItems = [
       { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-      { label: 'Expo Presentation', icon: Sparkles, path: '/demo', badge: 'Demo' },
+      { label: 'Expo Presentation', icon: Sparkles, path: '/expo', badge: 'Expo' },
       { label: 'Fleet Registry', icon: Car, path: '/vehicles', highlight: true },
       { label: 'Destinations', icon: MapPin, path: '/destinations' },
       { label: 'Deliveries', icon: Truck, path: '/deliveries' },
